@@ -1,0 +1,199 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/AppShell";
+import { useRequireRole } from "@/src/lib/route-guards";
+import { UserRole, MOCK_USERS } from "@/lib/auth";
+import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import { ActionItemPriority } from "@/types";
+import SchemeSelector from "@/src/components/ui/SchemeSelector";
+import UserSelector from "@/src/components/ui/UserSelector";
+import ProofUpload from "@/src/components/ui/ProofUpload";
+import ConfirmModal from "@/src/components/ui/ConfirmModal";
+
+const PRIORITIES: ActionItemPriority[] = ["Critical", "High", "Medium", "Low"];
+const MEETINGS = [
+  "Weekly HUDD Review",
+  "ULB Acceleration Sprint",
+  "Finance Lapse Risk Review",
+  "Joint Secretary Briefing",
+];
+
+export default function ActionItemCreatePage() {
+  useRequireRole([UserRole.TASU], "/action-items");
+
+  const [schemes, setSchemes] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [scheme, setScheme] = useState("");
+  const [priority, setPriority] = useState<ActionItemPriority>("High");
+  const [assignee, setAssignee] = useState(MOCK_USERS[0]?.id ?? "");
+  const [reviewer, setReviewer] = useState(MOCK_USERS[1]?.id ?? "");
+  const [meeting, setMeeting] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const data = await fetchActionItems();
+        if (!active) return;
+        const uniqueSchemes = Array.from(new Set(data.map((item) => item.schemeId)));
+        setSchemes(uniqueSchemes);
+        setScheme(uniqueSchemes[0] ?? "");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const canSubmit = title.trim().length > 0 && description.trim().length > 0 && scheme && dueDate;
+
+  const selectedAssignee = useMemo(() => MOCK_USERS.find((user) => user.id === assignee), [assignee]);
+  const selectedReviewer = useMemo(() => MOCK_USERS.find((user) => user.id === reviewer), [reviewer]);
+
+  return (
+    <AppShell title="Create Action Item">
+      <div className="space-y-6 px-6 py-6">
+        <div>
+          <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">TASU Desk</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">New Action Item</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Draft directives and assign officers for rapid follow up.
+          </p>
+        </div>
+
+        {success && (
+          <div className="rounded-xl border border-[var(--alert-success)] bg-[rgba(0,200,83,0.1)] px-4 py-3 text-sm text-[var(--alert-success)]">
+            Action item created and shared with assigned officers.
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl border border-[var(--alert-critical)] bg-[rgba(255,59,59,0.1)] px-4 py-3 text-sm text-[var(--alert-critical)]">
+            {error}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6">
+          {loading && (
+            <div className="text-sm text-[var(--text-muted)]">Loading schemes...</div>
+          )}
+
+          {!loading && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
+                <span className="text-xs uppercase tracking-[0.3em]">Title</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                  placeholder="Enter action item title"
+                />
+              </label>
+              <SchemeSelector schemes={schemes} value={scheme} onChange={setScheme} />
+              <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)] md:col-span-2">
+                <span className="text-xs uppercase tracking-[0.3em]">Description</span>
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                  rows={3}
+                  placeholder="Describe the expected action"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
+                <span className="text-xs uppercase tracking-[0.3em]">Priority</span>
+                <select
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value as ActionItemPriority)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  {PRIORITIES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
+                <span className="text-xs uppercase tracking-[0.3em]">Related Meeting (optional)</span>
+                <select
+                  value={meeting}
+                  onChange={(event) => setMeeting(event.target.value)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                >
+                  <option value="">None</option>
+                  {MEETINGS.map((entry) => (
+                    <option key={entry} value={entry}>
+                      {entry}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
+                <span className="text-xs uppercase tracking-[0.3em]">Due Date</span>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </label>
+              <UserSelector users={MOCK_USERS} value={assignee} onChange={setAssignee} label="Assigned Officer" />
+              <UserSelector users={MOCK_USERS} value={reviewer} onChange={setReviewer} label="Reviewer" />
+              <div className="md:col-span-2">
+                <ProofUpload label="Attach initial notes" onUpload={() => undefined} />
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-sm text-[var(--text-muted)]">
+            <div>
+              <p>
+                Assigned to: <span className="text-[var(--text-primary)]">{selectedAssignee?.name ?? ""}</span>
+              </p>
+              <p>
+                Reviewer: <span className="text-[var(--text-primary)]">{selectedReviewer?.name ?? ""}</span>
+              </p>
+            </div>
+            <button
+              className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
+              onClick={() => {
+                if (!canSubmit) {
+                  setError("Please complete title, description, scheme, and due date before submitting.");
+                  return;
+                }
+                setError(null);
+                setConfirmOpen(true);
+              }}
+              disabled={!canSubmit}
+            >
+              Submit Action Item
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ConfirmModal
+        open={confirmOpen}
+        title="Confirm submission"
+        message="Once submitted, this action item will be visible to assigned officers and the reviewer."
+        confirmLabel="Submit"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          setSuccess(true);
+          setError(null);
+        }}
+      />
+    </AppShell>
+  );
+}
