@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: hudd_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hudd_user
+      POSTGRES_PASSWORD: hudd_password
+      POSTGRES_DB: hudd_nexus
+    ports:
+      - "5432:5432"
+    volumes:
+      - hudd_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hudd_user -d hudd_nexus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: hudd_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+volumes:
+  hudd_postgres_data:

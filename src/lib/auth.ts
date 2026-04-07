@@ -153,6 +153,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_ACTION_ITEMS,
     Permission.UPDATE_ACTION_ITEMS,
     Permission.VIEW_ANALYTICS,
+    Permission.MANAGE_PERMISSIONS,
   ],
   [UserRole.NODAL_OFFICER]: [
     Permission.VIEW_ASSIGNED_DATA,

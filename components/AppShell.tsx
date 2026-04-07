@@ -29,7 +29,7 @@ export default function AppShell({ children, title }: Props) {
   const isViewer = user?.role === UserRole.VIEWER;
 
   return (
-    <div suppressHydrationWarning className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <header className="h-48 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4 flex items-center justify-between gap-6">

@@ -1,0 +1,552 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SponsorshipType {
+  STATE
+  CENTRAL
+  CENTRAL_SECTOR
+}
+
+enum WorkflowType {
+  financial
+  kpi
+  action_item
+}
+
+enum SchemeAssignmentKind {
+  dashboard_owner
+  kpi_owner_1
+  kpi_owner_2
+  action_item_owner_1
+  action_item_owner_2
+}
+
+enum PermissionEffect {
+  allow
+  deny
+}
+
+enum KPICategory {
+  STATE
+  CENTRAL
+}
+
+enum KPIType {
+  OUTPUT
+  OUTCOME
+  BINARY
+}
+
+enum KPIWorkflowStatus {
+  draft
+  submitted
+  reviewed
+  rejected
+}
+
+enum KPIProgressStatus {
+  on_track
+  delayed
+  overdue
+}
+
+enum ActionItemType {
+  action_item
+  meeting_decision
+}
+
+enum ActionItemPriority {
+  Critical
+  High
+  Medium
+  Low
+}
+
+enum ActionItemStatus {
+  OPEN
+  IN_PROGRESS
+  PROOF_UPLOADED
+  UNDER_REVIEW
+  COMPLETED
+  OVERDUE
+}
+
+model User {
+  id         String   @id @default(uuid()) @db.Uuid
+  code       String?  @unique
+  name       String
+  email      String   @unique
+  department String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userRoles            UserRole[]
+  createdPermissionOverrides UserPermissionOverride[] @relation("CreatedOverrides")
+  permissionOverrides  UserPermissionOverride[]
+
+  createdSchemes        Scheme[]               @relation("SchemeCreatedBy")
+  createdSubschemes     Subscheme[]            @relation("SubschemeCreatedBy")
+  createdFinanceBudgets FinanceBudget[]        @relation("FinanceBudgetCreatedBy")
+  createdFinanceBudgetRevisions FinanceBudgetRevision[] @relation("FinanceBudgetRevisionCreatedBy")
+  createdExpenditureSnapshots FinanceExpenditureSnapshot[] @relation("FinanceSnapshotCreatedBy")
+  createdFinanceSummaryHeads FinanceSummaryHead[] @relation("FinanceSummaryCreatedBy")
+  createdKpiDefinitions KpiDefinition[]        @relation("KpiDefinitionCreatedBy")
+  createdKpiMeasurements KpiMeasurement[]      @relation("KpiMeasurementCreatedBy")
+  reviewedKpiMeasurements KpiMeasurement[]     @relation("KpiMeasurementReviewedBy")
+  createdMeetings       DashboardMeeting[]     @relation("MeetingCreatedBy")
+  createdMeetingTopics  MeetingTopic[]         @relation("MeetingTopicCreatedBy")
+  createdActionItems    ActionItem[]           @relation("ActionItemCreatedBy")
+  assignedActionItems   ActionItem[]           @relation("ActionItemAssignedTo")
+  reviewedActionItems   ActionItem[]           @relation("ActionItemReviewedBy")
+  createdActionItemUpdates ActionItemUpdate[]  @relation("ActionItemUpdateCreatedBy")
+  uploadedFiles         File[]                 @relation("FileUploadedBy")
+  actionItemProofs      ActionItemProof[]      @relation("ActionItemProofUploadedBy")
+  auditLogs             AuditLog[]
+
+  schemeAssignments      SchemeAssignment[]
+
+  @@map("users")
+}
+
+model Role {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+  schemeAssignments SchemeAssignment[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+  userPermissionOverrides UserPermissionOverride[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model UserPermissionOverride {
+  id           String           @id @default(uuid()) @db.Uuid
+  userId       String           @db.Uuid
+  permissionId String           @db.Uuid
+  effect       PermissionEffect
+  createdById  String?          @db.Uuid
+  createdAt    DateTime         @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("CreatedOverrides", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, permissionId])
+  @@map("user_permission_overrides")
+}
+
+model Vertical {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schemes     Scheme[]
+  actionItems ActionItem[]
+
+  @@map("verticals")
+}
+
+model FinancialYear {
+  id        String   @id @default(uuid()) @db.Uuid
+  label     String   @unique
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  financeBudgets            FinanceBudget[]
+  financeExpenditureSnapshots FinanceExpenditureSnapshot[]
+  financeSummaryHeads       FinanceSummaryHead[]
+  kpiTargets                KpiTarget[]
+
+  @@map("financial_years")
+}
+
+model Scheme {
+  id              String          @id @default(uuid()) @db.Uuid
+  code            String          @unique
+  name            String
+  verticalId      String          @db.Uuid
+  sponsorshipType SponsorshipType
+  createdById     String?         @db.Uuid
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  vertical   Vertical @relation(fields: [verticalId], references: [id], onDelete: Restrict)
+  createdBy  User?    @relation("SchemeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  subschemes          Subscheme[]
+  assignments         SchemeAssignment[]
+  workflowConfigs     SchemeWorkflowConfig[]
+  financeBudgets      FinanceBudget[]
+  expenditureSnapshots FinanceExpenditureSnapshot[]
+  kpiDefinitions      KpiDefinition[]
+  actionItems         ActionItem[]
+
+  @@map("schemes")
+}
+
+model Subscheme {
+  id          String   @id @default(uuid()) @db.Uuid
+  schemeId    String   @db.Uuid
+  code        String
+  name        String
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scheme    Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("SubschemeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  assignments          SchemeAssignment[]
+  financeBudgets       FinanceBudget[]
+  expenditureSnapshots FinanceExpenditureSnapshot[]
+  kpiDefinitions       KpiDefinition[]
+  actionItems          ActionItem[]
+
+  @@unique([schemeId, code])
+  @@map("subschemes")
+}
+
+model SchemeAssignment {
+  id             String               @id @default(uuid()) @db.Uuid
+  schemeId       String               @db.Uuid
+  subschemeId    String?              @db.Uuid
+  assignmentKind SchemeAssignmentKind
+  userId         String?              @db.Uuid
+  roleId         String?              @db.Uuid
+  sortOrder      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+
+  scheme    Scheme     @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme Subscheme? @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role?      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([schemeId, assignmentKind])
+  @@map("scheme_assignments")
+}
+
+model SchemeWorkflowConfig {
+  id           String       @id @default(uuid()) @db.Uuid
+  schemeId     String       @db.Uuid
+  workflowType WorkflowType
+  config       Json
+  updatedAt    DateTime     @updatedAt
+
+  scheme Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@unique([schemeId, workflowType])
+  @@map("scheme_workflow_configs")
+}
+
+model FinanceBudget {
+  id             String   @id @default(uuid()) @db.Uuid
+  schemeId       String   @db.Uuid
+  subschemeId    String?  @db.Uuid
+  financialYearId String  @db.Uuid
+  budgetEstimateCr Decimal @db.Decimal(16, 2)
+  locked         Boolean  @default(false)
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  scheme       Scheme        @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme    Subscheme?    @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("FinanceBudgetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  revisions FinanceBudgetRevision[]
+
+  @@unique([schemeId, subschemeId, financialYearId])
+  @@map("finance_budgets")
+}
+
+model FinanceBudgetRevision {
+  id             String   @id @default(uuid()) @db.Uuid
+  financeBudgetId String  @db.Uuid
+  oldBudgetEstimateCr Decimal @db.Decimal(16, 2)
+  newBudgetEstimateCr Decimal @db.Decimal(16, 2)
+  reason         String
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  financeBudget FinanceBudget @relation(fields: [financeBudgetId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("FinanceBudgetRevisionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("finance_budget_revisions")
+}
+
+model FinanceExpenditureSnapshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  schemeId         String   @db.Uuid
+  subschemeId      String?  @db.Uuid
+  financialYearId  String   @db.Uuid
+  asOfDate         DateTime @db.Date
+  soExpenditureCr  Decimal  @db.Decimal(16, 2)
+  ifmsExpenditureCr Decimal @db.Decimal(16, 2)
+  remarks          String?
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  scheme        Scheme        @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme     Subscheme?    @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("FinanceSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([schemeId, financialYearId, asOfDate])
+  @@map("finance_expenditure_snapshots")
+}
+
+model FinanceSummaryHead {
+  id              String   @id @default(uuid()) @db.Uuid
+  financialYearId  String   @db.Uuid
+  headCode         String
+  asOfDate         DateTime @db.Date
+  budgetEstimateCr Decimal  @db.Decimal(16, 2)
+  soExpenditureCr  Decimal  @db.Decimal(16, 2)
+  ifmsExpenditureCr Decimal @db.Decimal(16, 2)
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("FinanceSummaryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([financialYearId, headCode, asOfDate])
+  @@map("finance_summary_heads")
+}
+
+model KpiDefinition {
+  id            String      @id @default(uuid()) @db.Uuid
+  schemeId       String      @db.Uuid
+  subschemeId    String?     @db.Uuid
+  category       KPICategory
+  description    String
+  kpiType        KPIType
+  numeratorUnit  String?
+  denominatorUnit String?
+  createdById    String?     @db.Uuid
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  scheme     Scheme     @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme  Subscheme? @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("KpiDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  targets KpiTarget[]
+
+  @@map("kpi_definitions")
+}
+
+model KpiTarget {
+  id             String   @id @default(uuid()) @db.Uuid
+  kpiDefinitionId String  @db.Uuid
+  financialYearId String  @db.Uuid
+  denominatorValue Decimal? @db.Decimal(16, 2)
+  createdAt      DateTime @default(now())
+
+  kpiDefinition KpiDefinition @relation(fields: [kpiDefinitionId], references: [id], onDelete: Cascade)
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+
+  measurements KpiMeasurement[]
+
+  @@unique([kpiDefinitionId, financialYearId])
+  @@map("kpi_targets")
+}
+
+model KpiMeasurement {
+  id             String            @id @default(uuid()) @db.Uuid
+  kpiTargetId    String            @db.Uuid
+  measuredAt     DateTime
+  numeratorValue Decimal?          @db.Decimal(16, 2)
+  yesValue       Boolean?
+  progressStatus KPIProgressStatus
+  workflowStatus KPIWorkflowStatus
+  remarks        String?
+  createdById    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+  reviewedById   String?           @db.Uuid
+  reviewedAt     DateTime?
+  reviewNote     String?
+
+  kpiTarget  KpiTarget @relation(fields: [kpiTargetId], references: [id], onDelete: Cascade)
+  createdBy  User?     @relation("KpiMeasurementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedBy User?     @relation("KpiMeasurementReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([kpiTargetId, measuredAt])
+  @@map("kpi_measurements")
+}
+
+model DashboardMeeting {
+  id          String   @id @default(uuid()) @db.Uuid
+  meetingDate DateTime @db.Date
+  title       String?
+  notes       String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  createdBy User? @relation("MeetingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  topics     MeetingTopic[]
+  actionItems ActionItem[]
+
+  @@map("dashboard_meetings")
+}
+
+model MeetingTopic {
+  id          String   @id @default(uuid()) @db.Uuid
+  meetingId   String   @db.Uuid
+  topic       String
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  meeting   DashboardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdBy User?            @relation("MeetingTopicCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("meeting_topics")
+}
+
+model ActionItem {
+  id           String           @id @default(uuid()) @db.Uuid
+  meetingId    String           @db.Uuid
+  schemeId     String           @db.Uuid
+  subschemeId  String?          @db.Uuid
+  verticalId   String?          @db.Uuid
+  itemType     ActionItemType
+  title        String
+  description  String
+  priority     ActionItemPriority
+  dueDate      DateTime         @db.Date
+  status       ActionItemStatus
+  assignedToId String?          @db.Uuid
+  reviewerId   String?          @db.Uuid
+  createdById  String?          @db.Uuid
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  meeting   DashboardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  scheme    Scheme           @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme Subscheme?       @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  vertical  Vertical?        @relation(fields: [verticalId], references: [id], onDelete: SetNull)
+
+  assignedTo User? @relation("ActionItemAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewer   User? @relation("ActionItemReviewedBy", fields: [reviewerId], references: [id], onDelete: SetNull)
+  createdBy  User? @relation("ActionItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  updates ActionItemUpdate[]
+  proofs  ActionItemProof[]
+
+  @@map("action_items")
+}
+
+model ActionItemUpdate {
+  id           String         @id @default(uuid()) @db.Uuid
+  actionItemId String         @db.Uuid
+  timestamp    DateTime
+  status       ActionItemStatus
+  note         String
+  createdById  String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+
+  actionItem ActionItem @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("ActionItemUpdateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([actionItemId, timestamp])
+  @@map("action_item_updates")
+}
+
+model File {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  url         String
+  mimeType    String?
+  sizeBytes   Int?
+  uploadedById String? @db.Uuid
+  uploadedAt  DateTime @default(now())
+
+  uploadedBy User? @relation("FileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  actionItemProofs ActionItemProof[]
+
+  @@map("files")
+}
+
+model ActionItemProof {
+  id          String   @id @default(uuid()) @db.Uuid
+  actionItemId String  @db.Uuid
+  fileId      String   @db.Uuid
+  uploadedById String? @db.Uuid
+  uploadedAt  DateTime @default(now())
+
+  actionItem ActionItem @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  file       File       @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  uploadedBy User?      @relation("ActionItemProofUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@unique([actionItemId, fileId])
+  @@map("action_item_proofs")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  occurredAt DateTime @default(now())
+  actorUserId String? @db.Uuid
+  actionType String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt])
+  @@map("audit_log")
+}

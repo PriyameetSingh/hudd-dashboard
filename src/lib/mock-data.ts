@@ -413,16 +413,16 @@ export const mockKPISubmissions: KPISubmission[] = [
 ];
 
 export const mockFinancialEntries: FinancialEntry[] = [
-  { id: "fin-01", scheme: "PMAY-U", vertical: "Housing", status: "submitted_pending", annualBudget: 820, so: 320.5, ifms: 83.5, lastUpdated: "2026-03-17", locked: false, submitter: "Shri Rakesh Mohanty" },
-  { id: "fin-02", scheme: "SUJALA", vertical: "Water", status: "submitted_pending", annualBudget: 360, so: 142.2, ifms: 136.8, lastUpdated: "2026-03-18", locked: false, submitter: "Shri Rakesh Mohanty" },
-  { id: "fin-03", scheme: "GARIMA", vertical: "SBM", status: "submitted_this_week", annualBudget: 80, so: 35.0, ifms: 21.4, lastUpdated: "2026-03-20", locked: false, submitter: "Shri Rakesh Mohanty" },
-  { id: "fin-04", scheme: "AMRUT 2.0 Water", vertical: "AMRUT", status: "draft", annualBudget: 680, so: 330.0, ifms: 320.0, lastUpdated: "2026-03-13", locked: false, submitter: "" },
-  { id: "fin-05", scheme: "LED Brownfield", vertical: "LED", status: "draft", annualBudget: 100, so: 50.2, ifms: 48.7, lastUpdated: "2026-03-15", locked: false, submitter: "" },
-  { id: "fin-06", scheme: "SBM Solid Waste", vertical: "SBM", status: "overdue", annualBudget: 220, so: 75.2, ifms: 60.0, lastUpdated: "2026-03-04", locked: false, submitter: "" },
-  { id: "fin-07", scheme: "PMAY-U Sewerage", vertical: "Housing", status: "overdue", annualBudget: 240, so: 120.0, ifms: 110.4, lastUpdated: "2026-03-06", locked: false, submitter: "" },
-  { id: "fin-08", scheme: "MSBY Infrastructure", vertical: "MSBY", status: "submitted_this_week", annualBudget: 340, so: 210.0, ifms: 198.0, lastUpdated: "2026-03-20", locked: false, submitter: "Shri Rakesh Mohanty" },
-  { id: "fin-09", scheme: "SAHAJOG Profiling", vertical: "NULM", status: "submitted_pending", annualBudget: 120, so: 47.5, ifms: 45.0, lastUpdated: "2026-03-19", locked: false, submitter: "" },
-  { id: "fin-10", scheme: "Capacity Building", vertical: "SUDA", status: "not_started", annualBudget: 88, so: 0, ifms: 0, lastUpdated: "2026-03-01", locked: false, submitter: "" },
+  { id: "fin-01", scheme: "PMAY-U", vertical: "Housing", status: "submitted_pending", annualBudget: 820, so: 320.5, ifms: 83.5, lastUpdated: "2026-03-17", locked: false, submitter: "Shri Rakesh Mohanty", updates: [] },
+  { id: "fin-02", scheme: "SUJALA", vertical: "Water", status: "submitted_pending", annualBudget: 360, so: 142.2, ifms: 136.8, lastUpdated: "2026-03-18", locked: false, submitter: "Shri Rakesh Mohanty", updates: [] },
+  { id: "fin-03", scheme: "GARIMA", vertical: "SBM", status: "submitted_this_week", annualBudget: 80, so: 35.0, ifms: 21.4, lastUpdated: "2026-03-20", locked: false, submitter: "Shri Rakesh Mohanty", updates: [] },
+  { id: "fin-04", scheme: "AMRUT 2.0 Water", vertical: "AMRUT", status: "draft", annualBudget: 680, so: 330.0, ifms: 320.0, lastUpdated: "2026-03-13", locked: false, submitter: "", updates: [] },
+  { id: "fin-05", scheme: "LED Brownfield", vertical: "LED", status: "draft", annualBudget: 100, so: 50.2, ifms: 48.7, lastUpdated: "2026-03-15", locked: false, submitter: "", updates: [] },
+  { id: "fin-06", scheme: "SBM Solid Waste", vertical: "SBM", status: "overdue", annualBudget: 220, so: 75.2, ifms: 60.0, lastUpdated: "2026-03-04", locked: false, submitter: "", updates: [] },
+  { id: "fin-07", scheme: "PMAY-U Sewerage", vertical: "Housing", status: "overdue", annualBudget: 240, so: 120.0, ifms: 110.4, lastUpdated: "2026-03-06", locked: false, submitter: "", updates: [] },
+  { id: "fin-08", scheme: "MSBY Infrastructure", vertical: "MSBY", status: "submitted_this_week", annualBudget: 340, so: 210.0, ifms: 198.0, lastUpdated: "2026-03-20", locked: false, submitter: "Shri Rakesh Mohanty", updates: [] },
+  { id: "fin-09", scheme: "SAHAJOG Profiling", vertical: "NULM", status: "submitted_pending", annualBudget: 120, so: 47.5, ifms: 45.0, lastUpdated: "2026-03-19", locked: false, submitter: "", updates: [] },
+  { id: "fin-10", scheme: "Capacity Building", vertical: "SUDA", status: "not_started", annualBudget: 88, so: 0, ifms: 0, lastUpdated: "2026-03-01", locked: false, submitter: "", updates: [] },
 ];
 
 export const pendingApprovalSummaries: PendingApprovalSummary[] = [

@@ -16,6 +16,7 @@ export interface MockUser {
   role: UserRole;
   department: string;
   assignedSchemes: string[];
+  permissions?: Permission[];
 }
 
 export enum Permission {
@@ -34,6 +35,7 @@ export enum Permission {
   EXPORT_REPORTS = "EXPORT_REPORTS",
   VIEW_COMMAND_CENTRE = "VIEW_COMMAND_CENTRE",
   VIEW_ANALYTICS = "VIEW_ANALYTICS",
+  MANAGE_PERMISSIONS = "MANAGE_PERMISSIONS",
 }
 
 export type ActionItemPriority = "Critical" | "High" | "Medium" | "Low";
@@ -94,6 +96,23 @@ export type FinancialEntryStatus =
   | "overdue"
   | "not_started";
 
+export interface FinancialEntryUpdate {
+  timestamp: string;
+  actor: string;
+  status: FinancialEntryStatus;
+  note?: string;
+  so?: number;
+  ifms?: number;
+}
+
+export interface FinancialEntryMetadata {
+  riskLevel?: "low" | "medium" | "high";
+  needsAttention?: boolean;
+  tags?: string[];
+  aiInsights?: string;
+  [key: string]: unknown;
+}
+
 export interface FinancialEntry {
   id: string;
   scheme: string;
@@ -105,6 +124,8 @@ export interface FinancialEntry {
   lastUpdated: string;
   locked: boolean;
   submitter: string;
+  updates: FinancialEntryUpdate[];
+  metadata?: FinancialEntryMetadata;
 }
 
 export interface PendingApprovalSummary {

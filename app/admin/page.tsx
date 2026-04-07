@@ -27,6 +27,14 @@ export default function AdminOverviewPage() {
             <p className="mt-2 text-sm text-[var(--text-muted)]">Assign roles and verify access scopes.</p>
           </Link>
           <Link
+            href="/admin/permissions"
+            className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition hover:border-[var(--border-strong)]"
+          >
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Permissions</p>
+            <h3 className="mt-3 text-lg font-semibold text-[var(--text-primary)]">Grant & roles</h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Add/remove people and assign permission templates.</p>
+          </Link>
+          <Link
             href="/admin/schemes"
             className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition hover:border-[var(--border-strong)]"
           >
