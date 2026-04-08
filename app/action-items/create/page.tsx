@@ -29,8 +29,20 @@ export default function ActionItemCreatePage() {
   const [meetingId, setMeetingId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function resetForm() {
+    setTitle("");
+    setDescription("");
+    setScheme("");
+    setPriority("High");
+    setAssignee(MOCK_USERS[0]?.id ?? "");
+    setReviewer(MOCK_USERS[1]?.id ?? "");
+    setMeetingId("");
+    setDueDate("");
+  }
 
   useEffect(() => {
     let active = true;
@@ -40,13 +52,11 @@ export default function ActionItemCreatePage() {
         if (!active) return;
         const codes = schemeData.schemes.map((s) => s.code);
         setSchemes(codes);
-        setScheme(codes[0] ?? "");
         const meetingOptions = meetingData.map((m) => ({
           id: m.id,
           label: `${m.meetingDate}${m.title ? ` — ${m.title}` : ""}`,
         }));
         setMeetings(meetingOptions);
-        setMeetingId(meetingOptions[0]?.id ?? "");
       } catch {
         if (active) setError("Could not load schemes or meetings. Check permissions.");
       } finally {
@@ -59,7 +69,7 @@ export default function ActionItemCreatePage() {
     };
   }, []);
 
-  const canSubmit = title.trim().length > 0 && description.trim().length > 0 && scheme && dueDate && meetingId;
+  const canSubmit = title.trim().length > 0 && description.trim().length > 0 && dueDate;
 
   const selectedAssignee = useMemo(() => MOCK_USERS.find((user) => user.id === assignee), [assignee]);
   const selectedReviewer = useMemo(() => MOCK_USERS.find((user) => user.id === reviewer), [reviewer]);
@@ -102,7 +112,7 @@ export default function ActionItemCreatePage() {
                   placeholder="Enter action item title"
                 />
               </label>
-              <SchemeSelector schemes={schemes} value={scheme} onChange={setScheme} />
+              <SchemeSelector schemes={schemes} value={scheme} onChange={setScheme} label="Scheme (Optional)" />
               <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)] md:col-span-2">
                 <span className="text-xs uppercase tracking-[0.3em]">Description</span>
                 <textarea
@@ -128,7 +138,7 @@ export default function ActionItemCreatePage() {
                 </select>
               </label>
               <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
-                <span className="text-xs uppercase tracking-[0.3em]">Related meeting</span>
+                <span className="text-xs uppercase tracking-[0.3em]">Related Meeting (Optional)</span>
                 <select
                   value={meetingId}
                   onChange={(event) => setMeetingId(event.target.value)}
@@ -169,18 +179,24 @@ export default function ActionItemCreatePage() {
               </p>
             </div>
             <button
-              className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
+              className="flex items-center gap-2 rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
               onClick={() => {
                 if (!canSubmit) {
-                  setError("Please complete title, description, scheme, meeting, and due date before submitting.");
+                  setError("Please complete title, description, and due date before submitting.");
                   return;
                 }
                 setError(null);
                 setConfirmOpen(true);
               }}
-              disabled={!canSubmit}
+              disabled={!canSubmit || submitting}
             >
-              Submit Action Item
+              {submitting && (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              )}
+              {submitting ? "Submitting…" : "Submit Action Item"}
             </button>
           </div>
         </div>
@@ -195,10 +211,11 @@ export default function ActionItemCreatePage() {
         onConfirm={async () => {
           setConfirmOpen(false);
           setError(null);
+          setSubmitting(true);
           try {
             await createActionItem({
-              meetingId,
-              schemeCode: scheme,
+              meetingId: meetingId || null,
+              schemeCode: scheme || null,
               title: title.trim(),
               description: description.trim(),
               priority,
@@ -206,9 +223,12 @@ export default function ActionItemCreatePage() {
               assignedToUserCode: assignee,
               reviewerUserCode: reviewer,
             });
+            resetForm();
             setSuccess(true);
           } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Create failed");
+          } finally {
+            setSubmitting(false);
           }
         }}
       />

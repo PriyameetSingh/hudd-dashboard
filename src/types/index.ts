@@ -131,7 +131,17 @@ export interface FinancialEntry {
   /** Internal id for ordering and APIs */
   schemeId?: string;
   dashboardPriority?: boolean;
-  subschemes?: Array<{ id: string; code: string; name: string }>;
+  subschemes?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    /** Latest snapshot SO expenditure for this subscheme (₹ Cr) */
+    so?: number;
+    /** Latest snapshot IFMS expenditure for this subscheme (₹ Cr) */
+    ifms?: number;
+    /** Budget estimate for this subscheme (₹ Cr) */
+    annualBudget?: number;
+  }>;
 }
 
 export interface FinanceSummaryRow {

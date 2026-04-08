@@ -23,8 +23,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
   const [category, setCategory] = useState<"STATE" | "CENTRAL">("STATE");
   const [kpiType, setKpiType] = useState<"OUTPUT" | "OUTCOME" | "BINARY">("OUTPUT");
   const [subschemeId, setSubschemeId] = useState<string>("");
-  const [numeratorUnit, setNumeratorUnit] = useState("");
-  const [denominatorUnit, setDenominatorUnit] = useState("");
+  const [unit, setUnit] = useState("");
+  const [denominator, setDenominator] = useState("");
 
   useEffect(() => {
     if (!open || !scheme) return;
@@ -32,8 +32,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
     setCategory("STATE");
     setKpiType("OUTPUT");
     setSubschemeId("");
-    setNumeratorUnit("");
-    setDenominatorUnit("");
+    setUnit("");
+    setDenominator("");
     setAlert(null);
   }, [open, scheme]);
 
@@ -47,14 +47,17 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
     setSaving(true);
     setAlert(null);
     try {
+      const unitTrimmed = unit.trim() || null;
+      const denominatorValue = denominator.trim() ? Number(denominator.trim()) : null;
       await createKpiDefinition({
         schemeId: scheme.id,
         subschemeId: subschemeId || null,
         category,
         description: d,
         kpiType,
-        numeratorUnit: numeratorUnit.trim() || null,
-        denominatorUnit: denominatorUnit.trim() || null,
+        numeratorUnit: unitTrimmed,
+        denominatorUnit: unitTrimmed,
+        denominatorValue: isNaN(denominatorValue as number) ? null : denominatorValue,
       });
       onSaved();
       onClose();
@@ -157,18 +160,21 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
           )}
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
-              Numerator unit
+              Unit
               <input
-                value={numeratorUnit}
-                onChange={(e) => setNumeratorUnit(e.target.value)}
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="e.g. households"
                 className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
               />
             </label>
             <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
-              Denominator unit
+              Denominator
               <input
-                value={denominatorUnit}
-                onChange={(e) => setDenominatorUnit(e.target.value)}
+                type="number"
+                value={denominator}
+                onChange={(e) => setDenominator(e.target.value)}
+                placeholder="e.g. 100"
                 className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
               />
             </label>

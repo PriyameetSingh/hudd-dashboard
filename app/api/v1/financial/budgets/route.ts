@@ -206,41 +206,67 @@ export async function GET() {
             latestBySub.set(snap.subschemeId, snap);
           }
         }
-        if (latestBySub.size > 0) {
-          so = 0;
-          ifms = 0;
-          let maxDate = new Date(0);
-          let anyDraft = false;
-          for (const snap of latestBySub.values()) {
-            so += toNumber(snap.soExpenditureCr);
-            ifms += toNumber(snap.ifmsExpenditureCr);
-            if (snap.asOfDate > maxDate) maxDate = snap.asOfDate;
-            if (snap.workflowStatus === "draft") anyDraft = true;
-            latest = snap;
-          }
-          aggregateWorkflow = anyDraft ? "draft" : "submitted";
-          const refDate = maxDate.getTime() > 0 ? maxDate : latest?.asOfDate ?? new Date();
-          const status = deriveFinancialEntryStatus({
-            workflowStatus: aggregateWorkflow,
-            asOfDate: refDate,
-          });
-          return buildEntry({
-            scheme,
-            schemeBudgets,
-            latest,
-            annualBudget,
-            so,
-            ifms,
-            status,
-            fyLabel: fy.label,
-            priority,
-          });
-        }
+      const subschemeDetails = scheme.subschemes.map((sub) => {
+        const snap = latestBySub.get(sub.id);
+        const budget = schemeBudgets.find((b) => b.subschemeId === sub.id);
+        return {
+          id: sub.id,
+          code: sub.code,
+          name: sub.name,
+          so: toNumber(snap?.soExpenditureCr ?? 0),
+          ifms: toNumber(snap?.ifmsExpenditureCr ?? 0),
+          annualBudget: toNumber(budget?.budgetEstimateCr ?? 0),
+        };
+      });
 
-        latest = null;
+      if (latestBySub.size > 0) {
         so = 0;
         ifms = 0;
-        aggregateWorkflow = "draft";
+        let maxDate = new Date(0);
+        let anyDraft = false;
+        for (const snap of latestBySub.values()) {
+          so += toNumber(snap.soExpenditureCr);
+          ifms += toNumber(snap.ifmsExpenditureCr);
+          if (snap.asOfDate > maxDate) maxDate = snap.asOfDate;
+          if (snap.workflowStatus === "draft") anyDraft = true;
+          latest = snap;
+        }
+        aggregateWorkflow = anyDraft ? "draft" : "submitted";
+        const refDate = maxDate.getTime() > 0 ? maxDate : latest?.asOfDate ?? new Date();
+        const status = deriveFinancialEntryStatus({
+          workflowStatus: aggregateWorkflow,
+          asOfDate: refDate,
+        });
+        return buildEntry({
+          scheme,
+          schemeBudgets,
+          latest,
+          annualBudget,
+          so,
+          ifms,
+          status,
+          fyLabel: fy.label,
+          priority,
+          subschemeDetails,
+        });
+      }
+
+      latest = null;
+      so = 0;
+      ifms = 0;
+      aggregateWorkflow = "draft";
+      return buildEntry({
+        scheme,
+        schemeBudgets,
+        latest,
+        annualBudget,
+        so: 0,
+        ifms: 0,
+        status: "not_started",
+        fyLabel: fy.label,
+        priority,
+        subschemeDetails,
+      });
       } else {
         const row = schemeBudgets.find((b) => b.subschemeId === null);
         annualBudget = row ? toNumber(row.budgetEstimateCr) : 0;
@@ -337,6 +363,7 @@ function buildEntry(params: {
   status: ReturnType<typeof deriveFinancialEntryStatus> | "not_started";
   fyLabel: string;
   priority: Map<string, number>;
+  subschemeDetails?: Array<{ id: string; code: string; name: string; so: number; ifms: number; annualBudget: number }>;
 }) {
   const { scheme, schemeBudgets, latest, annualBudget, so, ifms, status } = params;
   const budgetRow = schemeBudgets.find((b) => b.subschemeId === null) ?? schemeBudgets[0];
@@ -363,6 +390,6 @@ function buildEntry(params: {
       ifms: undefined,
     })),
     dashboardPriority: params.priority.has(scheme.id),
-    subschemes: scheme.subschemes.map((s) => ({ id: s.id, code: s.code, name: s.name })),
+    subschemes: params.subschemeDetails ?? scheme.subschemes.map((s) => ({ id: s.id, code: s.code, name: s.name })),
   };
 }

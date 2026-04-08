@@ -20,7 +20,7 @@ function mapActionItem(item: {
   status: ActionItemStatus;
   assignedTo: { name: string } | null;
   reviewer: { name: string } | null;
-  scheme: { code: string };
+  scheme: { code: string } | null;
   updates: Array<{
     timestamp: Date;
     status: ActionItemStatus;
@@ -43,7 +43,7 @@ function mapActionItem(item: {
     status: item.status,
     assignedTo: item.assignedTo?.name ?? "",
     reviewer: item.reviewer?.name ?? "",
-    schemeId: item.scheme.code,
+    schemeId: item.scheme?.code ?? "",
     daysOverdue: overdueDays,
     updates: item.updates.map((update) => ({
       timestamp: toIsoDate(update.timestamp),
@@ -96,8 +96,8 @@ export async function GET() {
 }
 
 type CreateBody = {
-  meetingId: string;
-  schemeCode: string;
+  meetingId?: string | null;
+  schemeCode?: string | null;
   subschemeCode?: string | null;
   title: string;
   description: string;
@@ -116,16 +116,22 @@ export async function POST(request: NextRequest) {
     const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
-    const scheme = await prisma.scheme.findUnique({
-      where: { code: body.schemeCode },
-      include: { vertical: true, subschemes: true },
-    });
-    if (!scheme) {
-      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    let scheme = null;
+    if (body.schemeCode) {
+      scheme = await prisma.scheme.findUnique({
+        where: { code: body.schemeCode },
+        include: { vertical: true, subschemes: true },
+      });
+      if (!scheme) {
+        return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+      }
     }
 
     let subschemeId: string | null = null;
     if (body.subschemeCode?.trim()) {
+      if (!scheme) {
+        return NextResponse.json({ detail: "Cannot specify a subscheme without a scheme" }, { status: 400 });
+      }
       const code = body.subschemeCode.trim();
       const sub = scheme.subschemes.find((s) => s.code.toUpperCase() === code.toUpperCase());
       if (!sub) {
@@ -134,9 +140,12 @@ export async function POST(request: NextRequest) {
       subschemeId = sub.id;
     }
 
-    const meeting = await prisma.dashboardMeeting.findUnique({ where: { id: body.meetingId } });
-    if (!meeting) {
-      return NextResponse.json({ detail: "Meeting not found" }, { status: 404 });
+    let meeting = null;
+    if (body.meetingId) {
+      meeting = await prisma.dashboardMeeting.findUnique({ where: { id: body.meetingId } });
+      if (!meeting) {
+        return NextResponse.json({ detail: "Meeting not found" }, { status: 404 });
+      }
     }
 
     const assignedTo = await prisma.user.findFirst({ where: { code: body.assignedToUserCode } });
@@ -149,10 +158,10 @@ export async function POST(request: NextRequest) {
 
     const created = await prisma.actionItem.create({
       data: {
-        meetingId: body.meetingId,
-        schemeId: scheme.id,
+        meetingId: body.meetingId ?? null,
+        schemeId: scheme?.id ?? null,
         subschemeId,
-        verticalId: scheme.verticalId,
+        verticalId: scheme?.verticalId ?? null,
         itemType: body.itemType ?? ActionItemType.action_item,
         title: body.title.trim(),
         description: body.description.trim(),
@@ -181,8 +190,8 @@ export async function POST(request: NextRequest) {
       "action_item",
       created.id,
       null,
-      { id: created.id, title: created.title, schemeId: scheme.id, meetingId: body.meetingId },
-      { ...auditContext, meetingId: body.meetingId, schemeId: scheme.id },
+      { id: created.id, title: created.title, schemeId: scheme?.id ?? null, meetingId: body.meetingId ?? null },
+      { ...auditContext, meetingId: body.meetingId ?? null, schemeId: scheme?.id ?? null },
     );
 
     return NextResponse.json({ id: created.id }, { status: 201 });

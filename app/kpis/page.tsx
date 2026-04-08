@@ -9,6 +9,7 @@ import { KPISubmission } from "@/types";
 import { UserRole } from "@/lib/auth";
 import StatusBadge from "@/src/components/ui/StatusBadge";
 import PendingBadge from "@/src/components/ui/PendingBadge";
+import ViewKpiModal from "@/components/kpis/ViewKpiModal";
 
 interface TabConfig {
   id: string;
@@ -23,6 +24,7 @@ export default function KPIsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
+  const [viewKpi, setViewKpi] = useState<KPISubmission | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -167,7 +169,7 @@ export default function KPIsPage() {
                 <div className="text-sm text-[var(--text-muted)]">No KPI submissions awaiting director review.</div>
               )}
               {pendingQueue.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 cursor-pointer hover:bg-[var(--bg-card)] transition" onClick={() => setViewKpi(item)}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">{item.scheme}</p>
@@ -197,7 +199,7 @@ export default function KPIsPage() {
                     </div>
                   </div>
                   {!isViewer && item.latestMeasurementId && (
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <div className="mt-4 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] disabled:opacity-50"
                         disabled={reviewBusyId === item.id}
@@ -264,7 +266,11 @@ export default function KPIsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((item) => (
-                    <tr key={item.id} className="border-b border-[var(--border)] text-[var(--text-primary)]">
+                    <tr
+                      key={item.id}
+                      className="cursor-pointer border-b border-[var(--border)] text-[var(--text-primary)] transition hover:bg-[var(--bg-surface)]"
+                      onClick={() => setViewKpi(item)}
+                    >
                       <td className="py-3 pr-4 font-medium">{item.scheme}</td>
                       <td className="py-3 pr-4">
                         <p className="font-medium">{item.description}</p>
@@ -284,6 +290,21 @@ export default function KPIsPage() {
           )}
         </div>
       </div>
+
+      <ViewKpiModal
+        open={!!viewKpi}
+        submission={viewKpi}
+        isReviewer={isDirector}
+        onClose={() => setViewKpi(null)}
+        onReviewed={async () => {
+          const data = await fetchKPISubmissions();
+          setSubmissions(data.submissions);
+          if (viewKpi) {
+            const updated = data.submissions.find((s) => s.id === viewKpi.id);
+            if (updated) setViewKpi(updated);
+          }
+        }}
+      />
     </AppShell>
   );
 }

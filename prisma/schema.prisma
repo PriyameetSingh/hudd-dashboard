@@ -462,8 +462,8 @@ model MeetingTopic {
 
 model ActionItem {
   id           String           @id @default(uuid()) @db.Uuid
-  meetingId    String           @db.Uuid
-  schemeId     String           @db.Uuid
+  meetingId    String?          @db.Uuid
+  schemeId     String?          @db.Uuid
   subschemeId  String?          @db.Uuid
   verticalId   String?          @db.Uuid
   itemType     ActionItemType
@@ -478,8 +478,8 @@ model ActionItem {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  meeting   DashboardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  scheme    Scheme           @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  meeting   DashboardMeeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  scheme    Scheme?           @relation(fields: [schemeId], references: [id], onDelete: Cascade)
   subscheme Subscheme?       @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
   vertical  Vertical?        @relation(fields: [verticalId], references: [id], onDelete: SetNull)
 

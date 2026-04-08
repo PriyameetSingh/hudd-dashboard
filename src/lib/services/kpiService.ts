@@ -1,5 +1,33 @@
 import { KPISubmission } from "@/types";
 
+export type KpiMeasurementHistory = {
+  id: string;
+  financialYear: string;
+  measuredAt: string;
+  numeratorValue: number | null;
+  yesValue: boolean | null;
+  denominatorValue: number | null;
+  workflowStatus: "draft" | "submitted_pending" | "approved" | "rejected";
+  remarks: string | null;
+  submittedBy: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+};
+
+export type KpiHistoryResponse = {
+  kpi: {
+    id: string;
+    description: string;
+    type: string;
+    category: string;
+    unit: string;
+    scheme: string;
+    vertical: string;
+  };
+  measurements: KpiMeasurementHistory[];
+};
+
 type KPIResponse = {
   financialYearLabel: string | null;
   submissions: KPISubmission[];
@@ -67,6 +95,11 @@ export async function setKpiTargetDenominator(targetId: string, denominatorValue
   await parseResponse<{ ok: boolean }>(response);
 }
 
+export async function fetchKpiHistory(kpiDefinitionId: string): Promise<KpiHistoryResponse> {
+  const response = await fetch(`/api/v1/kpis/definitions/${kpiDefinitionId}/history`, { cache: "no-store" });
+  return parseResponse<KpiHistoryResponse>(response);
+}
+
 export async function createKpiDefinition(input: {
   schemeId: string;
   subschemeId?: string | null;
@@ -75,6 +108,7 @@ export async function createKpiDefinition(input: {
   kpiType: "OUTPUT" | "OUTCOME" | "BINARY";
   numeratorUnit?: string | null;
   denominatorUnit?: string | null;
+  denominatorValue?: number | null;
 }): Promise<void> {
   const response = await fetch("/api/v1/kpis/definitions", {
     method: "POST",

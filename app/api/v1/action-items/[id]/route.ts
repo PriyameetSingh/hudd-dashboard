@@ -27,7 +27,7 @@ function mapActionItem(item: {
   status: ActionItemStatus;
   assignedTo: { name: string; id: string } | null;
   reviewer: { name: string; id: string } | null;
-  scheme: { code: string };
+  scheme: { code: string } | null;
   updates: Array<{
     timestamp: Date;
     status: ActionItemStatus;
@@ -52,7 +52,7 @@ function mapActionItem(item: {
     reviewer: item.reviewer?.name ?? "",
     assignedToUserId: item.assignedTo?.id,
     reviewerUserId: item.reviewer?.id,
-    schemeId: item.scheme.code,
+    schemeId: item.scheme?.code ?? "",
     daysOverdue: overdueDays,
     updates: item.updates.map((update) => ({
       timestamp: toIsoDate(update.timestamp),

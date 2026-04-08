@@ -36,14 +36,18 @@ export default function SchemeEntryPage() {
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [asOfDate, setAsOfDate] = useState(now.toISOString().slice(0, 10));
+  const [remarks, setRemarks] = useState("");
+
+  // Shared expenditure + budget inputs (used for scheme or selected subscheme)
   const [soValue, setSoValue] = useState(0);
   const [ifmsValue, setIfmsValue] = useState(0);
-  const [remarks, setRemarks] = useState("");
-  const [asOfDate, setAsOfDate] = useState(now.toISOString().slice(0, 10));
-  const [subschemeCode, setSubschemeCode] = useState("");
   const [budgetRevise, setBudgetRevise] = useState(false);
   const [reviseReason, setReviseReason] = useState("");
   const [newBudgetCr, setNewBudgetCr] = useState(0);
+
+  // Which subscheme is active (only meaningful when selected scheme has subschemes)
+  const [selectedSubschemeCode, setSelectedSubschemeCode] = useState<string>("");
 
   const loadEntries = useCallback(async () => {
     try {
@@ -57,6 +61,46 @@ export default function SchemeEntryPage() {
     }
   }, []);
 
+  const applyEntry = useCallback((entry: FinancialEntry | null) => {
+    setSelected(entry);
+    setRemarks("");
+    setSubmissionSuccess(false);
+    setError(null);
+    setBudgetRevise(false);
+    setReviseReason("");
+    if (!entry) return;
+
+    if (entry.subschemes && entry.subschemes.length > 0) {
+      const first = entry.subschemes[0];
+      setSelectedSubschemeCode(first.code);
+      setSoValue(first.so ?? 0);
+      setIfmsValue(first.ifms ?? 0);
+      setNewBudgetCr(first.annualBudget ?? 0);
+    } else {
+      setSelectedSubschemeCode("");
+      setSoValue(entry.so);
+      setIfmsValue(entry.ifms);
+      setNewBudgetCr(entry.annualBudget);
+    }
+  }, []);
+
+  const applySubscheme = useCallback(
+    (code: string, entry: FinancialEntry) => {
+      const sub = entry.subschemes?.find((s) => s.code === code);
+      if (!sub) return;
+      setSelectedSubschemeCode(code);
+      setSoValue(sub.so ?? 0);
+      setIfmsValue(sub.ifms ?? 0);
+      setNewBudgetCr(sub.annualBudget ?? 0);
+      setRemarks("");
+      setSubmissionSuccess(false);
+      setError(null);
+      setBudgetRevise(false);
+      setReviseReason("");
+    },
+    [],
+  );
+
   useEffect(() => {
     let active = true;
     const init = async () => {
@@ -65,11 +109,7 @@ export default function SchemeEntryPage() {
         if (!active) return;
         setEntries(data.entries);
         setFinancialYearLabel(data.financialYearLabel);
-        const initial = data.entries[0] ?? null;
-        setSelected(initial);
-        setSoValue(initial?.so ?? 0);
-        setIfmsValue(initial?.ifms ?? 0);
-        setNewBudgetCr(initial?.annualBudget ?? 0);
+        applyEntry(data.entries[0] ?? null);
       } catch (e: unknown) {
         if (!active) return;
         setLoadError(e instanceof Error ? e.message : "Failed to load financial data");
@@ -81,18 +121,7 @@ export default function SchemeEntryPage() {
     return () => {
       active = false;
     };
-  }, []);
-
-  useEffect(() => {
-    if (!selected) return;
-    if (selected.subschemes && selected.subschemes.length > 0) {
-      setSubschemeCode((prev) =>
-        selected.subschemes!.some((s) => s.code === prev) ? prev : selected.subschemes![0].code,
-      );
-    } else {
-      setSubschemeCode("");
-    }
-  }, [selected?.id, selected?.subschemes]);
+  }, [applyEntry]);
 
   const grouped = useMemo(() => {
     return entries.reduce<Record<string, FinancialEntry[]>>((acc, entry) => {
@@ -107,29 +136,20 @@ export default function SchemeEntryPage() {
 
   const hasSubschemes = (selected?.subschemes?.length ?? 0) > 0;
   const isBudgetLocked = selected?.locked ?? false;
-  const utilisation = selected?.annualBudget ? ((ifmsValue / selected.annualBudget) * 100).toFixed(1) : "0.0";
-  const lapseRisk = (100 - Number(utilisation)).toFixed(1);
 
-  const selectEntry = (entry: FinancialEntry) => {
-    setSelected(entry);
-    setSoValue(entry.so);
-    setIfmsValue(entry.ifms);
-    setNewBudgetCr(entry.annualBudget);
-    setRemarks("");
-    setSubschemeCode(entry.subschemes?.[0]?.code ?? "");
-    setBudgetRevise(false);
-    setReviseReason("");
-    setSubmissionSuccess(false);
-    setError(null);
-  };
+  const activeBudget = hasSubschemes ? newBudgetCr : selected?.annualBudget ?? 0;
+  const schemeDerivedBudget = selected?.annualBudget ?? 0;
+
+  const utilisation = activeBudget ? ((ifmsValue / activeBudget) * 100).toFixed(1) : "0.0";
+  const lapseRisk = (100 - Number(utilisation)).toFixed(1);
 
   const persistSnapshot = async (workflowStatus: "draft" | "submitted") => {
     if (!selected || !financialYearLabel) {
       setError("Missing scheme or financial year.");
       return;
     }
-    if (hasSubschemes && !subschemeCode.trim()) {
-      setError("Select a subscheme for this scheme.");
+    if (hasSubschemes && !selectedSubschemeCode.trim()) {
+      setError("Select a subscheme before saving.");
       return;
     }
     if (budgetRevise && !reviseReason.trim()) {
@@ -146,7 +166,7 @@ export default function SchemeEntryPage() {
       if (budgetRevise) {
         await patchFinancialBudget({
           schemeCode: selected.id,
-          subschemeCode: hasSubschemes ? subschemeCode.trim() : null,
+          subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
           newBudgetCr,
           reason: reviseReason,
           financialYearLabel,
@@ -155,7 +175,7 @@ export default function SchemeEntryPage() {
 
       await submitFinancialSnapshot({
         schemeCode: selected.id,
-        subschemeCode: hasSubschemes ? subschemeCode.trim() : null,
+        subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
         asOfDate,
         soExpenditureCr: soValue,
         ifmsExpenditureCr: ifmsValue,
@@ -174,11 +194,9 @@ export default function SchemeEntryPage() {
         const data = await loadEntries();
         if (data) {
           const next = data.entries.find((e) => e.id === selected.id) ?? data.entries[0] ?? null;
-          setSelected(next);
-          if (next) {
-            setSoValue(next.so);
-            setIfmsValue(next.ifms);
-            setNewBudgetCr(next.annualBudget);
+          applyEntry(next);
+          if (next && hasSubschemes && selectedSubschemeCode) {
+            applySubscheme(selectedSubschemeCode, next);
           }
         }
       }
@@ -229,7 +247,14 @@ export default function SchemeEntryPage() {
             <div className="flex flex-wrap items-center gap-3 justify-between mb-6">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheme-wise Financial Entry</p>
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{selected.scheme}</h1>
+                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {selected.scheme}
+                  {hasSubschemes && selectedSubschemeCode && (
+                    <span className="ml-2 text-lg font-normal text-[var(--text-muted)]">
+                      / {selectedSubschemeCode}
+                    </span>
+                  )}
+                </h1>
                 <div className="text-sm text-[var(--text-muted)] flex items-center gap-2">
                   <span className="rounded-full bg-[var(--border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.3em]">{selected.vertical}</span>
                   <span>{financialYearLabel ? `FY ${financialYearLabel}` : "FY"}</span>
@@ -245,6 +270,7 @@ export default function SchemeEntryPage() {
             </div>
 
             <div className="grid grid-cols-12 gap-6">
+              {/* Sidebar */}
               <aside className="col-span-4 space-y-4">
                 <div>
                   <label className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Search scheme</label>
@@ -255,56 +281,101 @@ export default function SchemeEntryPage() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </div>
+
                 {Object.entries(grouped).map(([vertical, schemes]) => (
                   <div key={vertical} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
                     <div className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">{vertical}</div>
-                    <div className="mt-3 space-y-2">
-                      {schemes.map((entry) => (
-                        <button
-                          key={entry.id}
-                          onClick={() => selectEntry(entry)}
-                          className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left transition ${
-                            selected.id === entry.id
-                              ? "border-[var(--text-primary)] bg-[var(--bg-primary)]"
-                              : "border-transparent hover:border-[var(--border)]"
-                          }`}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-[var(--text-primary)]">{entry.scheme}</p>
-                            <p className="text-[11px] text-[var(--text-muted)]">Updated {entry.lastUpdated}</p>
+                    <div className="mt-3 space-y-1">
+                      {schemes.map((entry) => {
+                        const isActive = selected.id === entry.id;
+                        const entryHasSubs = (entry.subschemes?.length ?? 0) > 0;
+                        return (
+                          <div key={entry.id}>
+                            <button
+                              onClick={() => applyEntry(entry)}
+                              className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left transition ${
+                                isActive
+                                  ? "border-[var(--text-primary)] bg-[var(--bg-primary)]"
+                                  : "border-transparent hover:border-[var(--border)]"
+                              }`}
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-[var(--text-primary)]">{entry.scheme}</p>
+                                <p className="text-[11px] text-[var(--text-muted)]">Updated {entry.lastUpdated}</p>
+                              </div>
+                              <span
+                                className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.3em]"
+                                style={{ color: STATUS_COLORS[entry.status] ?? "#95a5a6" }}
+                              >
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    background: STATUS_COLORS[entry.status] ?? "#95a5a6",
+                                    display: "inline-block",
+                                  }}
+                                />
+                                {entry.annualBudget
+                                  ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1)
+                                  : "0.0"}
+                                %
+                              </span>
+                            </button>
+
+                            {/* Subscheme selector — shown inline under the active scheme */}
+                            {isActive && entryHasSubs && (
+                              <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-[var(--border)] pl-3">
+                                {(entry.subschemes ?? []).map((sub) => {
+                                  const isActiveSub = selectedSubschemeCode === sub.code;
+                                  const subPct = (sub.annualBudget ?? 0)
+                                    ? (((sub.ifms ?? 0) / (sub.annualBudget ?? 1)) * 100).toFixed(1)
+                                    : "0.0";
+                                  return (
+                                    <button
+                                      key={sub.code}
+                                      onClick={() => applySubscheme(sub.code, entry)}
+                                      className={`flex w-full items-center justify-between rounded-xl border px-2.5 py-1.5 text-left transition ${
+                                        isActiveSub
+                                          ? "border-[var(--text-primary)] bg-[var(--bg-surface)]"
+                                          : "border-transparent hover:border-[var(--border)]"
+                                      }`}
+                                    >
+                                      <div>
+                                        <p className="text-[12px] font-semibold text-[var(--text-primary)]">{sub.code}</p>
+                                        <p className="text-[10px] text-[var(--text-muted)] leading-tight">{sub.name}</p>
+                                      </div>
+                                      <span className="text-[10px] text-[var(--text-muted)]">{subPct}%</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <span
-                            className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.3em]"
-                            style={{ color: STATUS_COLORS[entry.status] ?? "#95a5a6" }}
-                          >
-                            <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: "50%",
-                                background: STATUS_COLORS[entry.status] ?? "#95a5a6",
-                                display: "inline-block",
-                              }}
-                            />
-                            <span>
-                              {entry.annualBudget ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1) : "0.0"}%
-                            </span>
-                          </span>
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
               </aside>
 
+              {/* Main entry panel */}
               <section className="col-span-8 space-y-6">
+                {/* Budget card */}
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Annual Budget (₹ Cr)</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                        {hasSubschemes ? `Budget — ${selectedSubschemeCode} (₹ Cr)` : "Annual Budget (₹ Cr)"}
+                      </p>
                       <div className="text-3xl font-bold text-[var(--text-primary)]">
-                        {(budgetRevise ? newBudgetCr : selected.annualBudget).toLocaleString()}
+                        {(budgetRevise ? newBudgetCr : activeBudget).toLocaleString()}
                       </div>
+                      {hasSubschemes && (
+                        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                          Scheme total (derived): ₹{schemeDerivedBudget.toLocaleString()} Cr
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-[var(--text-muted)]">
@@ -317,7 +388,7 @@ export default function SchemeEntryPage() {
                           className="rounded-full border border-[var(--border)] px-3 py-1 text-[10px] uppercase tracking-[0.3em]"
                           onClick={() => {
                             setBudgetRevise((prev) => !prev);
-                            setNewBudgetCr(selected.annualBudget);
+                            setNewBudgetCr(activeBudget);
                             setReviseReason("");
                           }}
                         >
@@ -329,7 +400,7 @@ export default function SchemeEntryPage() {
                   {budgetRevise && (
                     <div className="mt-4 grid grid-cols-2 gap-4">
                       <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                        New Annual Budget (₹ Cr)
+                        New Budget (₹ Cr)
                         <input
                           type="number"
                           min={0}
@@ -352,31 +423,20 @@ export default function SchemeEntryPage() {
                   )}
                 </div>
 
-                {hasSubschemes && (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Subscheme</p>
-                    <select
-                      className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                      value={subschemeCode}
-                      onChange={(e) => setSubschemeCode(e.target.value)}
-                    >
-                      <option value="">Select subscheme</option>
-                      {selected.subschemes?.map((s) => (
-                        <option key={s.id} value={s.code}>
-                          {s.code} — {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
+                {/* Expenditure inputs */}
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-4">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Weekly Expenditure Update</p>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                    {hasSubschemes
+                      ? `Expenditure Update — ${selectedSubschemeCode}`
+                      : "Weekly Expenditure Update"}
+                  </p>
                   <div className="grid grid-cols-2 gap-4">
                     <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
                       As per SO Order (₹ Cr)
                       <input
                         type="number"
+                        min={0}
+                        step={0.01}
                         value={soValue}
                         onChange={(e) => setSoValue(Number(e.target.value))}
                         className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
@@ -386,12 +446,18 @@ export default function SchemeEntryPage() {
                       As per IFMS (₹ Cr)
                       <input
                         type="number"
+                        min={0}
+                        step={0.01}
                         value={ifmsValue}
                         onChange={(e) => setIfmsValue(Number(e.target.value))}
                         className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
                       />
                     </label>
                   </div>
+                </div>
+
+                {/* Date & remarks */}
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
                   <div className="grid grid-cols-[1.2fr_1.2fr] gap-4">
                     <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
                       Data as of
@@ -414,6 +480,7 @@ export default function SchemeEntryPage() {
                   </div>
                 </div>
 
+                {/* Summary + actions */}
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 grid gap-3 md:grid-cols-2">
                   <div className="space-y-3">
                     <div>

@@ -19,6 +19,7 @@ export default function SchemeSelector({ schemes, value, onChange, label = "Sche
         onChange={(event) => onChange(event.target.value)}
         className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none"
       >
+        <option value="">Select a scheme</option>
         {schemes.map((scheme) => (
           <option key={scheme} value={scheme}>
             {scheme}

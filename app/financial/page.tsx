@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import { getFinancialEntries } from "@/src/lib/services/financialService";
@@ -102,9 +102,8 @@ export default function FinancialOverviewPage() {
               <table className="w-full text-left text-sm">
                 <thead className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
                   <tr className="border-b border-[var(--border)]">
-                    <th className="py-3 pr-4">Scheme</th>
+                    <th className="py-3 pr-4">Scheme / Subscheme</th>
                     <th className="py-3 pr-4">Vertical</th>
-                    <th className="py-3 pr-4">Sector</th>
                     <th className="py-3 pr-4">Budget (₹ Cr)</th>
                     <th className="py-3 pr-4">SO (₹ Cr)</th>
                     <th className="py-3 pr-4">IFMS (₹ Cr)</th>
@@ -112,19 +111,57 @@ export default function FinancialOverviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="border-b border-[var(--border)] text-[var(--text-primary)]">
-                      <td className="py-3 pr-4 font-medium">{entry.scheme}</td>
-                      <td className="py-3 pr-4 text-[var(--text-muted)]">{entry.vertical}</td>
-                      <td className="py-3 pr-4 text-[var(--text-muted)]">{}</td>
-                      <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.annualBudget.toFixed(1)}</td>
-                      <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.so.toFixed(1)}</td>
-                      <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.ifms.toFixed(1)}</td>
-                      <td className="py-3">
-                        {entry.annualBudget ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1) : "0.0"}%
-                      </td>
-                    </tr>
-                  ))}
+                  {entries.map((entry) => {
+                    const hasSubs = (entry.subschemes?.length ?? 0) > 0;
+                    return (
+                      <React.Fragment key={entry.id}>
+                        {/* Scheme row — bold when it has subschemes (derived) */}
+                        <tr
+                          className={`border-b border-[var(--border)] text-[var(--text-primary)] ${hasSubs ? "bg-[var(--bg-card)]" : ""}`}
+                        >
+                          <td className="py-3 pr-4 font-semibold">
+                            {entry.scheme}
+                            {hasSubs && (
+                              <span className="ml-2 text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] font-normal">
+                                derived
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-[var(--text-muted)]">{entry.vertical}</td>
+                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.annualBudget.toFixed(1)}</td>
+                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.so.toFixed(1)}</td>
+                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.ifms.toFixed(1)}</td>
+                          <td className="py-3">
+                            {entry.annualBudget ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1) : "0.0"}%
+                          </td>
+                        </tr>
+                        {/* Subscheme rows — indented */}
+                        {hasSubs &&
+                          (entry.subschemes ?? []).map((sub) => (
+                            <tr
+                              key={`${entry.id}-${sub.code}`}
+                              className="border-b border-[var(--border)] text-[var(--text-muted)]"
+                            >
+                              <td className="py-2 pr-4 pl-6">
+                                <span className="text-[var(--text-muted)] mr-1.5">↳</span>
+                                <span className="font-medium text-[var(--text-primary)]">{sub.code}</span>
+                                <span className="ml-1.5 text-[11px]">{sub.name}</span>
+                              </td>
+                              <td className="py-2 pr-4" />
+                              <td className="py-2 pr-4">{(sub.annualBudget ?? 0).toFixed(1)}</td>
+                              <td className="py-2 pr-4">{(sub.so ?? 0).toFixed(1)}</td>
+                              <td className="py-2 pr-4">{(sub.ifms ?? 0).toFixed(1)}</td>
+                              <td className="py-2">
+                                {(sub.annualBudget ?? 0)
+                                  ? (((sub.ifms ?? 0) / (sub.annualBudget ?? 1)) * 100).toFixed(1)
+                                  : "0.0"}
+                                %
+                              </td>
+                            </tr>
+                          ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

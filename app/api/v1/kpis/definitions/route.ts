@@ -110,6 +110,7 @@ type CreateBody = {
   kpiType?: string;
   numeratorUnit?: string | null;
   denominatorUnit?: string | null;
+  denominatorValue?: number | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -173,6 +174,11 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  const initialDenominator =
+    body.denominatorValue !== null && body.denominatorValue !== undefined && !isNaN(Number(body.denominatorValue))
+      ? Number(body.denominatorValue)
+      : null;
+
   if (fy) {
     await prisma.kpiTarget.upsert({
       where: {
@@ -184,7 +190,7 @@ export async function POST(request: NextRequest) {
       create: {
         kpiDefinitionId: created.id,
         financialYearId: fy.id,
-        denominatorValue: null,
+        denominatorValue: initialDenominator,
       },
       update: {},
     });

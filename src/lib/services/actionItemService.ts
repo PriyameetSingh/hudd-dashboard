@@ -48,8 +48,8 @@ export async function updateActionItem(
 }
 
 export async function createActionItem(input: {
-  meetingId: string;
-  schemeCode: string;
+  meetingId?: string | null;
+  schemeCode?: string | null;
   subschemeCode?: string | null;
   title: string;
   description: string;
