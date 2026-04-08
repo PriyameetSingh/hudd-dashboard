@@ -1,0 +1,191 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { isValidAssignment, mapSchemeView, parseSponsorshipType } from "@/lib/scheme-api";
+import { getDbUserBySession, requireAnyPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+
+type AssignmentInput = {
+  id?: string;
+  assignmentKind: "dashboard_owner" | "kpi_owner_1" | "kpi_owner_2" | "action_item_owner_1" | "action_item_owner_2";
+  sortOrder?: number;
+  subschemeId?: string | null;
+  userId?: string | null;
+  roleId?: string | null;
+};
+
+type Body = {
+  code?: string;
+  name?: string;
+  verticalId?: string;
+  sponsorshipType?: "STATE" | "CENTRAL";
+  assignments?: AssignmentInput[];
+};
+
+export const runtime = "nodejs";
+
+function getPrismaErrorCode(error: unknown): string | null {
+  if (error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string") {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
+
+async function loadScheme(id: string) {
+  return prisma.scheme.findUnique({
+    where: { id },
+    include: {
+      vertical: { select: { name: true } },
+      subschemes: { orderBy: { name: "asc" } },
+      assignments: {
+        orderBy: [{ assignmentKind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+        include: {
+          user: { select: { id: true, name: true } },
+          role: { select: { id: true, code: true } },
+        },
+      },
+    },
+  });
+}
+
+export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+
+    const { id } = await ctx.params;
+    const scheme = await loadScheme(id);
+    if (!scheme) {
+      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ scheme: mapSchemeView(scheme) });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+}
+
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    await requirePermission("MANAGE_SCHEMES");
+
+    const { id } = await ctx.params;
+    const body = (await request.json()) as Body;
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
+
+    const before = await loadScheme(id);
+    if (!before) {
+      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    }
+
+    const sponsorshipType = body.sponsorshipType ? parseSponsorshipType(body.sponsorshipType) : undefined;
+    if (body.sponsorshipType && !sponsorshipType) {
+      return NextResponse.json({ detail: "Invalid sponsorshipType" }, { status: 400 });
+    }
+
+    const after = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.scheme.update({
+        where: { id },
+        data: {
+          code: body.code?.trim().toUpperCase(),
+          name: body.name?.trim(),
+          verticalId: body.verticalId,
+          ...(sponsorshipType !== undefined && sponsorshipType !== null ? { sponsorshipType } : {}),
+        },
+      });
+
+      if (body.assignments) {
+        await tx.schemeAssignment.deleteMany({ where: { schemeId: id } });
+        const rows = body.assignments
+          .filter(isValidAssignment)
+          .map((assignment) => ({
+            schemeId: id,
+            assignmentKind: assignment.assignmentKind,
+            sortOrder: assignment.sortOrder ?? 0,
+            subschemeId: assignment.subschemeId ?? null,
+            userId: assignment.userId ?? null,
+            roleId: assignment.roleId ?? null,
+          }));
+
+        if (rows.length > 0) {
+          await tx.schemeAssignment.createMany({ data: rows });
+        }
+      }
+
+      return tx.scheme.findUniqueOrThrow({
+        where: { id },
+        include: {
+          vertical: { select: { name: true } },
+          subschemes: { orderBy: { name: "asc" } },
+          assignments: {
+            orderBy: [{ assignmentKind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+            include: {
+              user: { select: { id: true, name: true } },
+              role: { select: { id: true, code: true } },
+            },
+          },
+        },
+      });
+    });
+
+    await logAudit(
+      actor?.id,
+      "scheme.update",
+      "scheme",
+      id,
+      mapSchemeView(before),
+      mapSchemeView(after),
+      { ...auditContext, schemeId: id },
+    );
+
+    return NextResponse.json({ scheme: mapSchemeView(after) });
+  } catch (error: unknown) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    if (getPrismaErrorCode(error) === "P2002") {
+      return NextResponse.json({ detail: "Scheme code already exists" }, { status: 409 });
+    }
+    throw error;
+  }
+}
+
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    await requirePermission("MANAGE_SCHEMES");
+
+    const { id } = await ctx.params;
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
+
+    const before = await loadScheme(id);
+    if (!before) {
+      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    }
+
+    await prisma.scheme.delete({ where: { id } });
+
+    await logAudit(
+      actor?.id,
+      "scheme.delete",
+      "scheme",
+      id,
+      mapSchemeView(before),
+      null,
+      { ...auditContext, schemeId: id },
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+}

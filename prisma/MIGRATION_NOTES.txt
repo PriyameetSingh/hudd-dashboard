@@ -1,0 +1,11 @@
+Migration: 20260407120000_financial_workflow_status
+
+- Adds enum FinancialWorkflowStatus (draft | submitted) and column workflowStatus on finance_expenditure_snapshots (default draft).
+- Deduplicates legacy snapshot rows that share the same (schemeId, financialYearId, asOfDate, subschemeId) before applying a unique index.
+- Creates unique index finance_expenditure_snapshots_scheme_subscheme_fy_date_key using COALESCE for NULL subschemeId.
+
+Apply with: npm run prisma:migrate (or prisma migrate deploy in CI).
+
+After migrating, run prisma generate if the client is not auto-updated.
+
+Re-seed role permissions (optional): re-run db:seed or manually add APPROVE_KPI / APPROVE_ACTION_ITEMS to roles as needed; seed.js was updated accordingly.

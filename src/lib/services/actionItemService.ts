@@ -29,16 +29,41 @@ export async function getActionItemById(id: string): Promise<ActionItem | undefi
   return data.item;
 }
 
-export async function updateActionItem(id: string, input: {
-  status?: ActionItem["status"];
-  note?: string;
-}): Promise<void> {
+export async function updateActionItem(
+  id: string,
+  input: {
+    status?: ActionItem["status"];
+    note?: string;
+    reviewerDecision?: "approve" | "reject";
+    rejectionReason?: string;
+  },
+): Promise<ActionItem> {
   const response = await fetch(`/api/v1/action-items/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  await parseResponse<{ ok: boolean }>(response);
+  const data = await parseResponse<{ item: ActionItem }>(response);
+  return data.item;
+}
+
+export async function createActionItem(input: {
+  meetingId: string;
+  schemeCode: string;
+  subschemeCode?: string | null;
+  title: string;
+  description: string;
+  priority: ActionItem["priority"];
+  dueDate: string;
+  assignedToUserCode: string;
+  reviewerUserCode: string;
+}): Promise<{ id: string }> {
+  const response = await fetch("/api/v1/action-items", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<{ id: string }>(response);
 }
 
 export async function addActionItemProof(id: string, input: {

@@ -1,0 +1,292 @@
+"use client";
+
+import { Fragment, useCallback, useEffect, useState } from "react";
+import AppShell from "@/components/AppShell";
+import AddKpiModal from "@/components/schemes/AddKpiModal";
+import SchemeFormModal from "@/components/schemes/SchemeFormModal";
+import { useRequireAuth } from "@/src/lib/route-guards";
+import { fetchSchemesOverview } from "@/src/lib/services/schemeService";
+import { SchemeOverview, SchemeReferenceData } from "@/types";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
+function formatCurrency(value: number) {
+  return `₹${value.toFixed(1)} Cr`;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+export default function SchemesPage() {
+  useRequireAuth();
+  const [schemes, setSchemes] = useState<SchemeOverview[]>([]);
+  const [reference, setReference] = useState<SchemeReferenceData | null>(null);
+  const [financialYearLabel, setFinancialYearLabel] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  const [schemeFormOpen, setSchemeFormOpen] = useState(false);
+  const [schemeFormTarget, setSchemeFormTarget] = useState<SchemeOverview | null>(null);
+  const [kpiModalScheme, setKpiModalScheme] = useState<SchemeOverview | null>(null);
+
+  const canManageSchemes = permissions.includes("MANAGE_SCHEMES");
+
+  const reloadOverview = useCallback(async () => {
+    const data = await fetchSchemesOverview();
+    setSchemes(data.schemes);
+    setFinancialYearLabel(data.financialYearLabel);
+    setReference(data.reference);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const [overviewRes, rbacRes] = await Promise.all([
+          fetchSchemesOverview(),
+          fetch("/api/v1/rbac/me", { cache: "no-store" }).then((r) => r.json()),
+        ]);
+        if (!active) return;
+        setSchemes(overviewRes.schemes);
+        setFinancialYearLabel(overviewRes.financialYearLabel);
+        setReference(overviewRes.reference);
+        setPermissions(Array.isArray(rbacRes.permissions) ? rbacRes.permissions : []);
+      } catch (e: unknown) {
+        if (!active) return;
+        setError(getErrorMessage(e, "Failed to load schemes"));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const openCreateScheme = () => {
+    setSchemeFormTarget(null);
+    setSchemeFormOpen(true);
+  };
+
+  const openEditScheme = (s: SchemeOverview) => {
+    setSchemeFormTarget(s);
+    setSchemeFormOpen(true);
+  };
+
+  return (
+    <AppShell title="Schemes">
+      <div className="space-y-6 px-6 py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">Programme registry</p>
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Schemes</h1>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              All schemes with KPI definitions, latest expenditure ({financialYearLabel ?? "current FY"}), and subschemes.
+            </p>
+          </div>
+          {canManageSchemes && reference && reference.verticals.length > 0 && (
+            <button
+              type="button"
+              onClick={openCreateScheme}
+              className="shrink-0 rounded-xl bg-[var(--text-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--bg-primary)]"
+            >
+              Create scheme
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-[var(--alert-critical)] bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--alert-critical)]">
+            {error}
+          </div>
+        )}
+
+        {loading && <div className="text-sm text-[var(--text-muted)]">Loading schemes...</div>}
+
+        {!loading && schemes.length === 0 && !error && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 text-sm text-[var(--text-muted)]">
+            No schemes found.
+          </div>
+        )}
+
+        {!loading && schemes.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)]">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--bg-surface)] text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                <tr>
+                  <th className="w-10 px-2 py-3" />
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Scheme</th>
+                  <th className="px-4 py-3">Vertical</th>
+                  <th className="px-4 py-3">KPIs</th>
+                  <th className="px-4 py-3">Budget (Cr)</th>
+                  <th className="px-4 py-3">SO</th>
+                  <th className="px-4 py-3">IFMS</th>
+                  <th className="px-4 py-3">Subschemes</th>
+                  {canManageSchemes && <th className="px-4 py-3">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {schemes.map((s) => {
+                  const open = expanded.has(s.id);
+                  const exp = s.expenditure;
+                  return (
+                    <Fragment key={s.id}>
+                      <tr className="border-t border-[var(--border)]">
+                        <td className="px-2 py-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(s.id)}
+                            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--border)]"
+                            aria-expanded={open}
+                          >
+                            {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{s.code}</td>
+                        <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{s.name}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{s.verticalName}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{s.kpis.length}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">
+                          {exp ? formatCurrency(exp.annualBudgetCr) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{exp ? formatCurrency(exp.soExpenditureCr) : "—"}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{exp ? formatCurrency(exp.ifmsExpenditureCr) : "—"}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{s.subschemes.length}</td>
+                        {canManageSchemes && (
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setKpiModalScheme(s)}
+                                className="rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-muted)]"
+                              >
+                                Add KPIs
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openEditScheme(s)}
+                                className="rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-muted)]"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                      {open && (
+                        <tr className="border-t border-[var(--border)] bg-[var(--bg-surface)]">
+                          <td colSpan={canManageSchemes ? 10 : 9} className="px-6 py-4">
+                            <div className="grid gap-6 lg:grid-cols-3">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Subschemes</p>
+                                {s.subschemes.length === 0 ? (
+                                  <p className="mt-2 text-sm text-[var(--text-muted)]">None</p>
+                                ) : (
+                                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-[var(--text-primary)]">
+                                    {s.subschemes.map((sub) => (
+                                      <li key={sub.id}>
+                                        <span className="font-medium">{sub.code}</span> — {sub.name}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                              <div className="lg:col-span-2">
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">KPI definitions</p>
+                                {s.kpis.length === 0 ? (
+                                  <p className="mt-2 text-sm text-[var(--text-muted)]">No KPIs linked to this scheme.</p>
+                                ) : (
+                                  <div className="mt-2 overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-left text-[var(--text-muted)]">
+                                          <th className="pb-2 pr-3">Description</th>
+                                          <th className="pb-2 pr-3">Type</th>
+                                          <th className="pb-2 pr-3">Category</th>
+                                          <th className="pb-2">Subscheme</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {s.kpis.map((k) => (
+                                          <tr key={k.id} className="border-t border-[var(--border)] text-[var(--text-primary)]">
+                                            <td className="py-2 pr-3 align-top">{k.description}</td>
+                                            <td className="py-2 pr-3 align-top">{k.kpiType}</td>
+                                            <td className="py-2 pr-3 align-top">{k.category}</td>
+                                            <td className="py-2 align-top">
+                                              {k.subschemeCode ? `${k.subschemeCode} (${k.subschemeName})` : "—"}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {exp && (
+                              <p className="mt-4 text-xs text-[var(--text-muted)]">
+                                Expenditure as of {exp.asOfDate ?? "—"} · FY {exp.financialYearLabel ?? "—"}
+                              </p>
+                            )}
+                            {s.assignments.length > 0 && (
+                              <div className="mt-4 border-t border-[var(--border)] pt-4">
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Assignments</p>
+                                <ul className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
+                                  {s.assignments.map((a) => (
+                                    <li key={a.id}>
+                                      {a.assignmentKind}
+                                      {a.userName ? ` · ${a.userName}` : ""}
+                                      {a.roleCode ? ` · ${a.roleCode}` : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {reference && (
+          <SchemeFormModal
+            open={schemeFormOpen}
+            onClose={() => {
+              setSchemeFormOpen(false);
+              setSchemeFormTarget(null);
+            }}
+            scheme={schemeFormTarget}
+            reference={reference}
+            onSaved={reloadOverview}
+          />
+        )}
+
+        <AddKpiModal
+          open={kpiModalScheme !== null}
+          onClose={() => setKpiModalScheme(null)}
+          scheme={kpiModalScheme}
+          onSaved={reloadOverview}
+        />
+      </div>
+    </AppShell>
+  );
+}

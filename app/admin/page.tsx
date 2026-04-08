@@ -35,7 +35,7 @@ export default function AdminOverviewPage() {
             <p className="mt-2 text-sm text-[var(--text-muted)]">Add/remove people and assign permission templates.</p>
           </Link>
           <Link
-            href="/admin/schemes"
+            href="/schemes"
             className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition hover:border-[var(--border-strong)]"
           >
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Schemes</p>

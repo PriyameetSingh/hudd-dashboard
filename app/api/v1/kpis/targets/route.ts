@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,16 @@ function toNumber(value: unknown): number | null {
 }
 
 export async function GET() {
+  try {
+    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+
   const targets = await prisma.kpiTarget.findMany({
     include: {
       financialYear: { select: { label: true } },

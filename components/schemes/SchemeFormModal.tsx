@@ -1,0 +1,491 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  addSubscheme,
+  createScheme,
+  deleteScheme,
+  updateScheme,
+} from "@/src/lib/services/schemeService";
+import { SchemeAssignmentKind, SchemeReferenceData, SchemeView, SponsorshipType } from "@/types";
+
+const DASHBOARD_OWNER_KIND = "dashboard_owner" as const;
+
+type DashboardAssignmentRow = {
+  assigneeType: "user" | "role";
+  sortOrder: number;
+  subschemeId: string | null;
+  userId: string | null;
+  roleId: string | null;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+function dashboardRowFromView(entry: SchemeView["assignments"][number]): DashboardAssignmentRow {
+  const hasUser = Boolean(entry.userId);
+  const hasRole = Boolean(entry.roleId);
+  const assigneeType: "user" | "role" = hasRole && !hasUser ? "role" : "user";
+  return {
+    assigneeType,
+    sortOrder: entry.sortOrder,
+    subschemeId: entry.subschemeId,
+    userId: assigneeType === "user" ? entry.userId : null,
+    roleId: assigneeType === "role" ? entry.roleId : null,
+  };
+}
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  /** When null, modal is in “create” mode. */
+  scheme: SchemeView | null;
+  reference: SchemeReferenceData;
+  onSaved: () => void;
+};
+
+export default function SchemeFormModal({ open, onClose, scheme, reference, onSaved }: Props) {
+  const [saving, setSaving] = useState(false);
+  const [alert, setAlert] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    code: "",
+    name: "",
+    verticalId: "",
+    sponsorshipType: "STATE" as SponsorshipType,
+  });
+  const [subschemes, setSubschemes] = useState<Array<{ code: string; name: string }>>([]);
+  const [subschemeDraft, setSubschemeDraft] = useState({ code: "", name: "" });
+  /** Editable rows: dashboard ownership only (`dashboard_owner`). */
+  const [assignments, setAssignments] = useState<DashboardAssignmentRow[]>([]);
+  /** On edit, other assignment kinds are kept and re-sent on save so PATCH does not wipe them. */
+  const [preservedNonDashboardAssignments, setPreservedNonDashboardAssignments] = useState<
+    Array<{
+      assignmentKind: SchemeAssignmentKind;
+      sortOrder: number;
+      subschemeId: string | null;
+      userId: string | null;
+      roleId: string | null;
+    }>
+  >([]);
+
+  const resetForm = useCallback(() => {
+    setSelectedId(null);
+    setForm({
+      code: "",
+      name: "",
+      verticalId: reference.verticals[0]?.id ?? "",
+      sponsorshipType: "STATE",
+    });
+    setSubschemes([]);
+    setSubschemeDraft({ code: "", name: "" });
+    setAssignments([]);
+    setPreservedNonDashboardAssignments([]);
+    setAlert(null);
+  }, [reference.verticals]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (scheme) {
+      setSelectedId(scheme.id);
+      setForm({
+        code: scheme.code,
+        name: scheme.name,
+        verticalId: scheme.verticalId,
+        sponsorshipType: scheme.sponsorshipType,
+      });
+      setSubschemes(scheme.subschemes.map((item) => ({ code: item.code, name: item.name })));
+      const dashboard = scheme.assignments.filter((e) => e.assignmentKind === DASHBOARD_OWNER_KIND);
+      const other = scheme.assignments.filter((e) => e.assignmentKind !== DASHBOARD_OWNER_KIND);
+      setPreservedNonDashboardAssignments(
+        other.map((entry) => ({
+          assignmentKind: entry.assignmentKind,
+          sortOrder: entry.sortOrder,
+          subschemeId: entry.subschemeId,
+          userId: entry.userId,
+          roleId: entry.roleId,
+        })),
+      );
+      setAssignments(dashboard.map(dashboardRowFromView));
+      setSubschemeDraft({ code: "", name: "" });
+    } else {
+      resetForm();
+    }
+  }, [open, scheme, resetForm]);
+
+  const buildAssignmentsPayload = () => {
+    const dashboardPayload = assignments.map((row, index) => ({
+      assignmentKind: DASHBOARD_OWNER_KIND,
+      sortOrder: row.sortOrder ?? index,
+      subschemeId: row.subschemeId,
+      userId: row.assigneeType === "user" ? row.userId : null,
+      roleId: row.assigneeType === "role" ? row.roleId : null,
+    }));
+    return [...preservedNonDashboardAssignments, ...dashboardPayload];
+  };
+
+  const handleSave = async () => {
+    if (!form.code.trim() || !form.name.trim() || !form.verticalId) {
+      setAlert("Scheme code, name, and vertical are required.");
+      return;
+    }
+
+    setSaving(true);
+    setAlert(null);
+    try {
+      const assignmentsPayload = buildAssignmentsPayload();
+      if (selectedId) {
+        await updateScheme(selectedId, {
+          code: form.code,
+          name: form.name,
+          verticalId: form.verticalId,
+          sponsorshipType: form.sponsorshipType,
+          assignments: assignmentsPayload,
+        });
+      } else {
+        await createScheme({
+          code: form.code,
+          name: form.name,
+          verticalId: form.verticalId,
+          sponsorshipType: form.sponsorshipType,
+          subschemes,
+          assignments: assignmentsPayload,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (error: unknown) {
+      setAlert(getErrorMessage(error, "Unable to save scheme."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddSubschemeToExisting = async () => {
+    if (!selectedId) return;
+    if (!subschemeDraft.code.trim() || !subschemeDraft.name.trim()) {
+      setAlert("Subscheme code and name are required.");
+      return;
+    }
+    setSaving(true);
+    setAlert(null);
+    try {
+      await addSubscheme(selectedId, {
+        code: subschemeDraft.code.trim(),
+        name: subschemeDraft.name.trim(),
+      });
+      setSubschemeDraft({ code: "", name: "" });
+      onSaved();
+    } catch (error: unknown) {
+      setAlert(getErrorMessage(error, "Unable to add subscheme."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedId) return;
+    if (!window.confirm("Delete this scheme? This cannot be undone.")) return;
+    setSaving(true);
+    setAlert(null);
+    try {
+      await deleteScheme(selectedId);
+      onSaved();
+      onClose();
+    } catch (error: unknown) {
+      setAlert(getErrorMessage(error, "Unable to delete scheme."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const title = scheme ? "Edit scheme" : "Create scheme";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="scheme-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 id="scheme-modal-title" className="text-lg font-semibold text-[var(--text-primary)]">
+              {title}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">Scheme code, vertical, ownership assignments, and optional subschemes.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+          >
+            Close
+          </button>
+        </div>
+
+        {alert && (
+          <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+            {alert}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+            Code
+            <input
+              value={form.code}
+              onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            />
+          </label>
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+            Name
+            <input
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            />
+          </label>
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+            Vertical
+            <select
+              value={form.verticalId}
+              onChange={(event) => setForm((prev) => ({ ...prev, verticalId: event.target.value }))}
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            >
+              {reference.verticals.map((vertical) => (
+                <option key={vertical.id} value={vertical.id}>
+                  {vertical.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+            Sponsorship Type
+            <select
+              value={form.sponsorshipType}
+              onChange={(event) => setForm((prev) => ({ ...prev, sponsorshipType: event.target.value as SponsorshipType }))}
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            >
+              <option value="STATE">STATE</option>
+              <option value="CENTRAL">CENTRAL</option>
+            </select>
+          </label>
+
+          {!selectedId && (
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Optional subschemes (on create)</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <input
+                  placeholder="Subscheme code"
+                  value={subschemeDraft.code}
+                  onChange={(event) => setSubschemeDraft((prev) => ({ ...prev, code: event.target.value }))}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+                <input
+                  placeholder="Subscheme name"
+                  value={subschemeDraft.name}
+                  onChange={(event) => setSubschemeDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!subschemeDraft.code.trim() || !subschemeDraft.name.trim()) return;
+                  setSubschemes((prev) => [...prev, { code: subschemeDraft.code, name: subschemeDraft.name }]);
+                  setSubschemeDraft({ code: "", name: "" });
+                }}
+                className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+              >
+                Add subscheme
+              </button>
+              {subschemes.length > 0 && (
+                <div className="space-y-1 text-xs text-[var(--text-muted)]">
+                  {subschemes.map((item, index) => (
+                    <div key={`${item.code}-${index}`}>
+                      {item.code} — {item.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedId && (
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Add subscheme to this scheme</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <input
+                  placeholder="Subscheme code"
+                  value={subschemeDraft.code}
+                  onChange={(event) => setSubschemeDraft((prev) => ({ ...prev, code: event.target.value }))}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+                <input
+                  placeholder="Subscheme name"
+                  value={subschemeDraft.name}
+                  onChange={(event) => setSubschemeDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleAddSubschemeToExisting}
+                className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] disabled:opacity-60"
+              >
+                Add subscheme
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Dashboard owner assignments</p>
+            <p className="text-xs text-[var(--text-muted)]">Each row is a dashboard owner. Assign either a user or a role.</p>
+            <button
+              type="button"
+              onClick={() =>
+                setAssignments((prev) => [
+                  ...prev,
+                  {
+                    assigneeType: "user",
+                    sortOrder: prev.length,
+                    subschemeId: null,
+                    userId: null,
+                    roleId: null,
+                  },
+                ])
+              }
+              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+            >
+              Add assignment
+            </button>
+            {assignments.map((item, index) => (
+              <div
+                key={`assignment-${index}`}
+                className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-3 md:flex-row md:flex-wrap md:items-center"
+              >
+                <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-primary)]">
+                  <span className="text-[var(--text-muted)]">Assign to</span>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`scheme-assignee-${index}`}
+                      checked={item.assigneeType === "user"}
+                      onChange={() =>
+                        setAssignments((prev) =>
+                          prev.map((entry, entryIndex) =>
+                            entryIndex === index ? { ...entry, assigneeType: "user", roleId: null } : entry,
+                          ),
+                        )
+                      }
+                      className="accent-[var(--text-primary)]"
+                    />
+                    User
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name={`scheme-assignee-${index}`}
+                      checked={item.assigneeType === "role"}
+                      onChange={() =>
+                        setAssignments((prev) =>
+                          prev.map((entry, entryIndex) =>
+                            entryIndex === index ? { ...entry, assigneeType: "role", userId: null } : entry,
+                          ),
+                        )
+                      }
+                      className="accent-[var(--text-primary)]"
+                    />
+                    Role
+                  </label>
+                </div>
+                {item.assigneeType === "user" ? (
+                  <select
+                    value={item.userId ?? ""}
+                    onChange={(event) =>
+                      setAssignments((prev) =>
+                        prev.map((entry, entryIndex) =>
+                          entryIndex === index ? { ...entry, userId: event.target.value || null } : entry,
+                        ),
+                      )
+                    }
+                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                  >
+                    <option value="">Select user</option>
+                    {reference.users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    value={item.roleId ?? ""}
+                    onChange={(event) =>
+                      setAssignments((prev) =>
+                        prev.map((entry, entryIndex) =>
+                          entryIndex === index ? { ...entry, roleId: event.target.value || null } : entry,
+                        ),
+                      )
+                    }
+                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                  >
+                    <option value="">Select role</option>
+                    {reference.roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.code}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAssignments((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] md:ml-auto"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
+            >
+              {saving ? "Saving..." : selectedId ? "Update scheme" : "Create scheme"}
+            </button>
+            {selectedId && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleDelete}
+                className="rounded-xl border border-[var(--alert-critical)] px-4 py-2 text-sm text-[var(--alert-critical)] disabled:opacity-60"
+              >
+                Delete scheme
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

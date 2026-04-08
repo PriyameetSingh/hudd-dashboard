@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { KPICategory, KPIType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requireAnyPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -23,6 +26,16 @@ function mapWorkflowStatus(workflowStatus?: string | null): "not_submitted" | "d
 }
 
 export async function GET() {
+  try {
+    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+
   const fy = await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
 
   const definitions = await prisma.kpiDefinition.findMany({
@@ -53,12 +66,15 @@ export async function GET() {
   });
 
   return NextResponse.json({
+    financialYearLabel: fy?.label ?? null,
     submissions: definitions.map((definition: (typeof definitions)[number]) => {
       const target = definition.targets[0] ?? null;
       const measurement = target?.measurements[0] ?? null;
 
       return {
         id: definition.id,
+        kpiTargetId: target?.id ?? null,
+        latestMeasurementId: measurement?.id ?? null,
         scheme: definition.scheme.name,
         vertical: definition.scheme.vertical.name,
         category: definition.category,
@@ -74,4 +90,134 @@ export async function GET() {
       };
     }),
   });
+}
+
+function parseCategory(value: unknown): KPICategory | null {
+  if (value === "STATE" || value === "CENTRAL") return value;
+  return null;
+}
+
+function parseKpiType(value: unknown): KPIType | null {
+  if (value === "OUTPUT" || value === "OUTCOME" || value === "BINARY") return value;
+  return null;
+}
+
+type CreateBody = {
+  schemeId?: string;
+  subschemeId?: string | null;
+  category?: string;
+  description?: string;
+  kpiType?: string;
+  numeratorUnit?: string | null;
+  denominatorUnit?: string | null;
+};
+
+export async function POST(request: NextRequest) {
+  try {
+    await requirePermission("MANAGE_SCHEMES");
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+
+  const body = (await request.json()) as CreateBody;
+  const schemeId = body.schemeId?.trim();
+  const description = body.description?.trim();
+  const category = parseCategory(body.category);
+  const kpiType = parseKpiType(body.kpiType);
+
+  if (!schemeId || !description || !category || !kpiType) {
+    return NextResponse.json(
+      { detail: "schemeId, description, category (STATE|CENTRAL), and kpiType (OUTPUT|OUTCOME|BINARY) are required" },
+      { status: 400 },
+    );
+  }
+
+  const scheme = await prisma.scheme.findUnique({
+    where: { id: schemeId },
+    select: { id: true, code: true },
+  });
+  if (!scheme) {
+    return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+  }
+
+  let subschemeId: string | null = body.subschemeId?.trim() || null;
+  if (subschemeId) {
+    const sub = await prisma.subscheme.findFirst({
+      where: { id: subschemeId, schemeId },
+      select: { id: true },
+    });
+    if (!sub) {
+      return NextResponse.json({ detail: "Subscheme does not belong to this scheme" }, { status: 400 });
+    }
+  }
+
+  const actor = await getDbUserBySession();
+  const auditContext = getAuditRequestContext(request);
+
+  const fy = await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
+
+  const created = await prisma.kpiDefinition.create({
+    data: {
+      schemeId,
+      subschemeId,
+      category,
+      description,
+      kpiType,
+      numeratorUnit: body.numeratorUnit?.trim() || null,
+      denominatorUnit: body.denominatorUnit?.trim() || null,
+      createdById: actor?.id ?? null,
+    },
+  });
+
+  if (fy) {
+    await prisma.kpiTarget.upsert({
+      where: {
+        kpiDefinitionId_financialYearId: {
+          kpiDefinitionId: created.id,
+          financialYearId: fy.id,
+        },
+      },
+      create: {
+        kpiDefinitionId: created.id,
+        financialYearId: fy.id,
+        denominatorValue: null,
+      },
+      update: {},
+    });
+  }
+
+  await logAudit(
+    actor?.id,
+    "kpi_definition.create",
+    "kpi_definition",
+    created.id,
+    null,
+    {
+      id: created.id,
+      schemeId: created.schemeId,
+      description: created.description,
+      kpiType: created.kpiType,
+    },
+    { ...auditContext, schemeId, schemeCode: scheme.code },
+  );
+
+  return NextResponse.json(
+    {
+      definition: {
+        id: created.id,
+        schemeId: created.schemeId,
+        subschemeId: created.subschemeId,
+        category: created.category,
+        description: created.description,
+        kpiType: created.kpiType,
+        numeratorUnit: created.numeratorUnit,
+        denominatorUnit: created.denominatorUnit,
+      },
+    },
+    { status: 201 },
+  );
 }

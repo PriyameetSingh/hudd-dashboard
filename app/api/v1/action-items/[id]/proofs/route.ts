@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ActionItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getDbUserBySession } from "@/lib/server-rbac";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -10,15 +12,19 @@ type Body = {
 };
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const body = (await request.json()) as Body;
+  try {
+    await requireAnyPermission("UPLOAD_PROOF", "UPDATE_ACTION_ITEMS");
 
-  const actionItem = await prisma.actionItem.findUnique({ where: { id } });
-  if (!actionItem) {
-    return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
-  }
+    const { id } = await ctx.params;
+    const body = (await request.json()) as Body;
 
-  const actor = await getDbUserBySession();
+    const actionItem = await prisma.actionItem.findUnique({ where: { id } });
+    if (!actionItem) {
+      return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
+    }
+
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
 
   const existingFile = await prisma.file.findFirst({
     where: {
@@ -58,5 +64,27 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     },
   });
 
+  await prisma.actionItem.update({
+    where: { id: actionItem.id },
+    data: { status: ActionItemStatus.PROOF_UPLOADED },
+  });
+
+  await logAudit(
+    actor?.id,
+    "action_item.proof.upload",
+    "action_item_proof",
+    actionItem.id,
+    null,
+    { fileId: file.id, name: file.name },
+    { ...auditContext, actionItemId: actionItem.id, meetingId: actionItem.meetingId, schemeId: actionItem.schemeId },
+  );
+
   return NextResponse.json({ ok: true });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
 }

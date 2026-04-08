@@ -60,3 +60,15 @@ export async function requirePermission(permissionCode: string) {
     throw new AuthError(403, "Forbidden");
   }
 }
+
+export async function requireAnyPermission(...permissionCodes: string[]) {
+  const effective = await getEffectivePermissionCodes();
+  if (!permissionCodes.some((code) => effective.has(code))) {
+    throw new AuthError(403, "Forbidden");
+  }
+}
+
+export async function hasPermission(permissionCode: string): Promise<boolean> {
+  const effective = await getEffectivePermissionCodes();
+  return effective.has(permissionCode);
+}

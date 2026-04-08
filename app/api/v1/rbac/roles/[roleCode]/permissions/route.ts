@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ roleCo
   try {
     await requirePermission("MANAGE_PERMISSIONS");
 
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
     const { roleCode } = await ctx.params;
     const body = (await request.json()) as Body;
 
@@ -33,6 +36,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ roleCo
         .delete({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } } })
         .catch(() => null);
     }
+
+    await logAudit(
+      actor?.id,
+      "rbac.role.permission",
+      "role_permission",
+      role.id,
+      null,
+      { roleCode, permissionCode: body.permissionCode, granted: body.granted },
+      { ...auditContext, roleCode },
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {

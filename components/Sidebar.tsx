@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { UserRole, getCurrentUser } from "@/lib/auth";
 import { useTheme } from "./ThemeProvider";
-import { LayoutDashboard, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays } from "lucide-react";
+import { LayoutDashboard, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -31,13 +31,26 @@ const items: NavItem[] = [
     roles: Object.values(UserRole),
     children: [
       {
-        label: "Enter Data",
-        href: "/financial/entry",
+        label: "Scheme Entry",
+        href: "/financial/entry/scheme",
+        icon: IndianRupee,
+        roles: [UserRole.FA],
+        emphasis: true,
+      },
+      {
+        label: "Summary Entry",
+        href: "/financial/entry/summary",
         icon: UserCog,
         roles: [UserRole.FA],
         emphasis: true,
       },
     ],
+  },
+  {
+    label: "Schemes",
+    href: "/schemes",
+    icon: Layers,
+    roles: Object.values(UserRole),
   },
   {
     label: "KPI Tracker",
@@ -92,12 +105,6 @@ const items: NavItem[] = [
         href: "/admin/users",
         icon: UserCog,
         roles: [UserRole.ACS, UserRole.PS_HUDD],
-      },
-      {
-        label: "Schemes",
-        href: "/admin/schemes",
-        icon: ShieldCheck,
-        roles: [UserRole.AS, UserRole.ACS],
       },
     ],
   },

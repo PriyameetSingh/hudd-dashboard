@@ -75,6 +75,8 @@ export type KPIStatus = "not_submitted" | "draft" | "submitted" | "submitted_pen
 
 export interface KPISubmission {
   id: string;
+  kpiTargetId?: string | null;
+  latestMeasurementId?: string | null;
   scheme: string;
   vertical: string;
   category: KPICategory;
@@ -126,6 +128,18 @@ export interface FinancialEntry {
   submitter: string;
   updates: FinancialEntryUpdate[];
   metadata?: FinancialEntryMetadata;
+  /** Internal id for ordering and APIs */
+  schemeId?: string;
+  dashboardPriority?: boolean;
+  subschemes?: Array<{ id: string; code: string; name: string }>;
+}
+
+export interface FinanceSummaryRow {
+  headCode: string;
+  label: string;
+  budgetEstimateCr: number;
+  soExpenditureCr: number;
+  ifmsExpenditureCr: number;
 }
 
 export interface PendingApprovalSummary {
@@ -133,4 +147,65 @@ export interface PendingApprovalSummary {
   financial: number;
   kpi: number;
   actionItems: number;
+}
+
+export type SponsorshipType = "STATE" | "CENTRAL";
+
+export type SchemeAssignmentKind = "dashboard_owner" | "kpi_owner_1" | "kpi_owner_2" | "action_item_owner_1" | "action_item_owner_2";
+
+export interface SchemeAssignmentView {
+  id: string;
+  assignmentKind: SchemeAssignmentKind;
+  sortOrder: number;
+  subschemeId: string | null;
+  userId: string | null;
+  userName: string | null;
+  roleId: string | null;
+  roleCode: string | null;
+}
+
+export interface SubschemeView {
+  id: string;
+  schemeId: string;
+  code: string;
+  name: string;
+}
+
+export interface SchemeView {
+  id: string;
+  code: string;
+  name: string;
+  verticalId: string;
+  verticalName: string;
+  sponsorshipType: SponsorshipType;
+  subschemes: SubschemeView[];
+  assignments: SchemeAssignmentView[];
+}
+
+export interface SchemeReferenceData {
+  verticals: Array<{ id: string; code: string; name: string }>;
+  roles: Array<{ id: string; code: string; name: string }>;
+  users: Array<{ id: string; code: string | null; name: string; email: string }>;
+}
+
+export interface SchemeKpiSummary {
+  id: string;
+  description: string;
+  kpiType: string;
+  category: string;
+  subschemeCode: string | null;
+  subschemeName: string | null;
+}
+
+export interface SchemeExpenditureSummary {
+  financialYearLabel: string | null;
+  annualBudgetCr: number;
+  soExpenditureCr: number;
+  ifmsExpenditureCr: number;
+  asOfDate: string | null;
+}
+
+export interface SchemeOverview extends SchemeView {
+  kpis: SchemeKpiSummary[];
+  expenditure: SchemeExpenditureSummary | null;
 }

@@ -4,7 +4,7 @@ import { useMemo, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import RoleBadge from "@/src/components/ui/RoleBadge";
-import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
+import { fetchKPISubmissionsList } from "@/src/lib/services/kpiService";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 
 export default function ProfilePage() {
@@ -15,7 +15,7 @@ export default function ProfilePage() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [kpis, actions] = await Promise.all([fetchKPISubmissions(), fetchActionItems()]);
+      const [kpis, actions] = await Promise.all([fetchKPISubmissionsList(), fetchActionItems()]);
       if (!active) return;
       setKpiCount(kpis.length);
       setActionCount(actions.length);

@@ -7,30 +7,36 @@ import { getCurrentUser, MockUser, UserRole } from "@/lib/auth";
 
 export function useRequireAuth(redirectTo = "/login") {
   const router = useRouter();
-  const [user, setUser] = useState<MockUser | null>(() => getCurrentUser());
+  const [user, setUser] = useState<MockUser | null>(null);
 
   useEffect(() => {
-    if (!user) {
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    if (!currentUser) {
       router.replace(redirectTo);
     }
-  }, [user, router, redirectTo]);
+  }, [redirectTo, router]);
 
   return useMemo(() => user, [user]);
 }
 
 export function useRequireRole(roles: UserRole[] = [], redirectTo = "/dashboard") {
   const router = useRouter();
-  const [user, setUser] = useState<MockUser | null>(() => getCurrentUser());
+  const [user, setUser] = useState<MockUser | null>(null);
+  const rolesKey = roles.join(",");
 
   useEffect(() => {
-    if (!user) {
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    if (!currentUser) {
       router.replace("/login");
       return;
     }
-    if (roles.length > 0 && !roles.includes(user.role)) {
+    const allowedRoles = rolesKey ? (rolesKey.split(",") as UserRole[]) : [];
+    if (allowedRoles.length > 0 && !allowedRoles.includes(currentUser.role)) {
       router.replace(redirectTo);
     }
-  }, [user, roles, router, redirectTo]);
+  }, [rolesKey, redirectTo, router]);
 
   return useMemo(() => user, [user]);
 }

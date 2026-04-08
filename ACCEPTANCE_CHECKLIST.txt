@@ -1,0 +1,44 @@
+Acceptance criteria mapping (implemented in this pass)
+
+A) Scheme + Subscheme
+- CRUD routes: /api/v1/schemes, /api/v1/schemes/[id], /api/v1/schemes/[id]/subschemes, /api/v1/subschemes/[id]
+- Sponsorship STATE/CENTRAL via parseSponsorshipType + Prisma SponsorshipType
+- Admin UI /admin/schemes: create/edit, optional subschemes on create, SchemeAssignment owners
+
+B) Financial (FA)
+- Mutations: ENTER_FINANCIAL_DATA on POST /api/v1/financial/snapshots and POST /api/v1/financial/summary
+- Reads: VIEW_ALL_DATA or VIEW_ASSIGNED_DATA on GET budgets/summary
+- Scheme vs subscheme: snapshots require subschemeCode when scheme has subschemes; budgets aggregate subscheme budgets/snapshots
+- workflowStatus on snapshots (not status in remarks); deriveFinancialEntryStatus for dashboard labels
+- Finance summary heads API + FA entry UI table (PLAN_TYPE / TRANSFER / ADMIN_EXPENDITURE)
+- /financial/entry wired to APIs (draft/submit, summary save)
+
+C) KPI workflow
+- ENTER_KPI_DATA on measurements/target denominator; APPROVE_KPI on POST .../measurements/[id]/review
+- Denominator: locked after set; MANAGE_SCHEMES overrides
+- SchemeAssignment kpi_owner_1 / kpi_owner_2 enforced when rows exist
+- KPI entry + KPI list (director review) call real APIs
+
+D) Meetings
+- GET/POST /api/v1/meetings, GET/PATCH/DELETE /api/v1/meetings/[id], topics POST, meeting-topics PATCH/DELETE
+- /meetings lists meetings, topics, linked action items
+
+E) Action items
+- POST /api/v1/action-items create; PATCH with performer/reviewer flows; proofs with audit
+- Action detail page uses APIs; proof links open href
+
+F) Dashboard ordering
+- GET /api/v1/financial/budgets sorts by SchemeAssignment dashboard_owner for current user/roles
+
+G) Audit
+- lib/audit.ts + logAudit on financial, KPI, meetings, action items, RBAC mutations, schemes/subschemes (existing)
+
+H) RBAC
+- requirePermission / requireAnyPermission on routes; seed updated for APPROVE_KPI / APPROVE_ACTION_ITEMS
+
+I) UX
+- Loading/error states on meetings, financial entry load error, KPI entry load error; API error messages surfaced
+
+J) Tests
+- npm run verify:behaviors (node:test) for financial status + denominator rule smoke checks
+- Full integration tests require DB + auth harness (not added)

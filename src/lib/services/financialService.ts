@@ -1,7 +1,8 @@
-import { FinancialEntry } from "@/types";
+import { FinanceSummaryRow, FinancialEntry } from "@/types";
 
 type FinancialEntriesResponse = {
   entries: FinancialEntry[];
+  financialYearLabel: string | null;
 };
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -12,9 +13,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function getFinancialEntries(): Promise<FinancialEntry[]> {
+export async function fetchFinancialBudgets(): Promise<FinancialEntriesResponse> {
   const response = await fetch("/api/v1/financial/budgets", { cache: "no-store" });
-  const data = await parseResponse<FinancialEntriesResponse>(response);
+  return parseResponse<FinancialEntriesResponse>(response);
+}
+
+export async function getFinancialEntries(): Promise<FinancialEntry[]> {
+  const data = await fetchFinancialBudgets();
   return data.entries;
 }
 
@@ -25,12 +30,62 @@ export async function getFinancialEntryById(id: string): Promise<FinancialEntry 
 
 export async function submitFinancialSnapshot(input: {
   schemeCode: string;
+  subschemeCode?: string | null;
   asOfDate: string;
   soExpenditureCr: number;
   ifmsExpenditureCr: number;
   remarks?: string;
+  financialYearLabel?: string;
+  workflowStatus: "draft" | "submitted";
 }): Promise<void> {
   const response = await fetch("/api/v1/financial/snapshots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ ok: boolean }>(response);
+}
+
+export async function fetchFinanceSummary(params?: { asOfDate?: string; financialYearLabel?: string }): Promise<{
+  financialYearLabel: string;
+  asOfDate: string | null;
+  rows: FinanceSummaryRow[];
+  totals: { budgetEstimateCr: number; soExpenditureCr: number; ifmsExpenditureCr: number };
+}> {
+  const search = new URLSearchParams();
+  if (params?.asOfDate) search.set("asOfDate", params.asOfDate);
+  if (params?.financialYearLabel) search.set("financialYearLabel", params.financialYearLabel);
+  const q = search.toString();
+  const response = await fetch(`/api/v1/financial/summary${q ? `?${q}` : ""}`, { cache: "no-store" });
+  return parseResponse(response);
+}
+
+export async function patchFinancialBudget(input: {
+  schemeCode: string;
+  subschemeCode?: string | null;
+  newBudgetCr: number;
+  reason: string;
+  financialYearLabel?: string;
+}): Promise<void> {
+  const response = await fetch("/api/v1/financial/budgets", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ ok: boolean }>(response);
+}
+
+export async function saveFinanceSummary(input: {
+  asOfDate: string;
+  financialYearLabel?: string;
+  rows: Array<{
+    headCode: "PLAN_TYPE" | "TRANSFER" | "ADMIN_EXPENDITURE";
+    budgetEstimateCr: number;
+    soExpenditureCr: number;
+    ifmsExpenditureCr: number;
+  }>;
+}): Promise<void> {
+  const response = await fetch("/api/v1/financial/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

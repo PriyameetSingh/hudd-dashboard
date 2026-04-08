@@ -44,6 +44,11 @@ enum KPIType {
   BINARY
 }
 
+enum FinancialWorkflowStatus {
+  draft
+  submitted
+}
+
 enum KPIWorkflowStatus {
   draft
   submitted
@@ -334,6 +339,7 @@ model FinanceExpenditureSnapshot {
   soExpenditureCr  Decimal  @db.Decimal(16, 2)
   ifmsExpenditureCr Decimal @db.Decimal(16, 2)
   remarks          String?
+  workflowStatus   FinancialWorkflowStatus @default(draft)
   createdById      String?  @db.Uuid
   createdAt        DateTime @default(now())
 

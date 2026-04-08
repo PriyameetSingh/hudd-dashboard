@@ -1,70 +1,148 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getDbUserBySession } from "@/lib/server-rbac";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
 type Body = {
   schemeCode: string;
+  subschemeCode?: string | null;
   asOfDate: string;
   soExpenditureCr: number;
   ifmsExpenditureCr: number;
   remarks?: string;
   financialYearLabel?: string;
+  workflowStatus?: "draft" | "submitted";
 };
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json()) as Body;
+  try {
+    await requireAnyPermission("ENTER_FINANCIAL_DATA");
 
-  const scheme = await prisma.scheme.findUnique({ where: { code: body.schemeCode } });
-  if (!scheme) {
-    return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
-  }
+    const body = (await request.json()) as Body;
 
-  const fy = body.financialYearLabel
-    ? await prisma.financialYear.findUnique({ where: { label: body.financialYearLabel } })
-    : await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
-
-  if (!fy) {
-    return NextResponse.json({ detail: "Financial year not found" }, { status: 404 });
-  }
-
-  const createdBy = await getDbUserBySession();
-  const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);
-
-  const existing = await prisma.financeExpenditureSnapshot.findFirst({
-    where: {
-      schemeId: scheme.id,
-      financialYearId: fy.id,
-      asOfDate,
-    },
-    select: { id: true },
-  });
-
-  if (existing) {
-    await prisma.financeExpenditureSnapshot.update({
-      where: { id: existing.id },
-      data: {
-        soExpenditureCr: body.soExpenditureCr,
-        ifmsExpenditureCr: body.ifmsExpenditureCr,
-        remarks: body.remarks,
-        createdById: createdBy?.id ?? null,
-      },
+    const scheme = await prisma.scheme.findUnique({
+      where: { code: body.schemeCode },
+      include: { subschemes: true },
     });
-  } else {
-    await prisma.financeExpenditureSnapshot.create({
-      data: {
+    if (!scheme) {
+      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    }
+
+    const fy = body.financialYearLabel
+      ? await prisma.financialYear.findUnique({ where: { label: body.financialYearLabel } })
+      : await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
+
+    if (!fy) {
+      return NextResponse.json({ detail: "Financial year not found" }, { status: 404 });
+    }
+
+    const subIds = scheme.subschemes.map((s) => s.id);
+    let subschemeId: string | null = null;
+    if (body.subschemeCode?.trim()) {
+      const code = body.subschemeCode.trim();
+      const sub = scheme.subschemes.find((s) => s.code.toUpperCase() === code.toUpperCase());
+      if (!sub) {
+        return NextResponse.json({ detail: "Subscheme not found for this scheme" }, { status: 404 });
+      }
+      subschemeId = sub.id;
+    } else if (subIds.length > 0) {
+      return NextResponse.json(
+        { detail: "This scheme has subschemes: enter expenditure at subscheme level (subschemeCode)." },
+        { status: 400 },
+      );
+    }
+
+    const createdBy = await getDbUserBySession();
+    const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);
+    // FA submissions go directly to submitted (approved) — no separate review gate
+    const workflowStatus: "draft" | "submitted" = body.workflowStatus === "draft" ? "draft" : "submitted";
+
+    const existing = await prisma.financeExpenditureSnapshot.findFirst({
+      where: {
         schemeId: scheme.id,
-        subschemeId: null,
+        subschemeId,
         financialYearId: fy.id,
         asOfDate,
-        soExpenditureCr: body.soExpenditureCr,
-        ifmsExpenditureCr: body.ifmsExpenditureCr,
-        remarks: body.remarks,
-        createdById: createdBy?.id ?? null,
       },
     });
-  }
 
-  return NextResponse.json({ ok: true });
+    const auditContext = getAuditRequestContext(request);
+    const before = existing
+      ? {
+          id: existing.id,
+          soExpenditureCr: existing.soExpenditureCr.toString(),
+          ifmsExpenditureCr: existing.ifmsExpenditureCr.toString(),
+          workflowStatus: existing.workflowStatus,
+        }
+      : null;
+
+    if (existing) {
+      await prisma.financeExpenditureSnapshot.update({
+        where: { id: existing.id },
+        data: {
+          soExpenditureCr: body.soExpenditureCr,
+          ifmsExpenditureCr: body.ifmsExpenditureCr,
+          remarks: body.remarks,
+          workflowStatus,
+          createdById: createdBy?.id ?? null,
+        },
+      });
+    } else {
+      await prisma.financeExpenditureSnapshot.create({
+        data: {
+          schemeId: scheme.id,
+          subschemeId,
+          financialYearId: fy.id,
+          asOfDate,
+          soExpenditureCr: body.soExpenditureCr,
+          ifmsExpenditureCr: body.ifmsExpenditureCr,
+          remarks: body.remarks,
+          workflowStatus,
+          createdById: createdBy?.id ?? null,
+        },
+      });
+    }
+
+    const afterRow = await prisma.financeExpenditureSnapshot.findFirst({
+      where: {
+        schemeId: scheme.id,
+        subschemeId,
+        financialYearId: fy.id,
+        asOfDate,
+      },
+    });
+
+    await logAudit(
+      createdBy?.id,
+      existing ? "financial.snapshot.update" : "financial.snapshot.create",
+      "finance_expenditure_snapshot",
+      afterRow?.id,
+      before,
+      afterRow
+        ? {
+            id: afterRow.id,
+            soExpenditureCr: afterRow.soExpenditureCr.toString(),
+            ifmsExpenditureCr: afterRow.ifmsExpenditureCr.toString(),
+            workflowStatus: afterRow.workflowStatus,
+          }
+        : null,
+      {
+        ...auditContext,
+        schemeId: scheme.id,
+        subschemeId,
+        financialYearId: fy.id,
+        workflowTransition: workflowStatus,
+      },
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
 }

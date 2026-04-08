@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ userCo
     await requirePermission("MANAGE_PERMISSIONS");
 
     const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
     const { userCode } = await ctx.params;
     const body = (await request.json()) as Body;
 
@@ -25,6 +27,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ userCo
 
     if (body.effect === "unset") {
       await prisma.userPermissionOverride.delete({ where: { userId_permissionId: { userId: user.id, permissionId: perm.id } } }).catch(() => null);
+      await logAudit(
+        actor?.id,
+        "rbac.permission.unset",
+        "user_permission_override",
+        user.id,
+        { permissionCode: body.permissionCode },
+        null,
+        { ...auditContext, targetUserCode: userCode },
+      );
       return NextResponse.json({ ok: true });
     }
 
@@ -33,6 +44,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ userCo
       update: { effect: body.effect, createdById: actor?.id ?? null },
       create: { userId: user.id, permissionId: perm.id, effect: body.effect, createdById: actor?.id ?? null },
     });
+
+    await logAudit(
+      actor?.id,
+      "rbac.permission.override",
+      "user_permission_override",
+      user.id,
+      null,
+      { permissionCode: body.permissionCode, effect: body.effect },
+      { ...auditContext, targetUserCode: userCode },
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {

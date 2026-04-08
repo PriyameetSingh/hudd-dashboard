@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { ActionItemPriority, ActionItemStatus, ActionItemType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -7,7 +10,25 @@ function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function mapActionItem(item: any) {
+function mapActionItem(item: {
+  id: string;
+  title: string;
+  description: string;
+  vertical: { name: string } | null;
+  priority: ActionItemPriority;
+  dueDate: Date;
+  status: ActionItemStatus;
+  assignedTo: { name: string } | null;
+  reviewer: { name: string } | null;
+  scheme: { code: string };
+  updates: Array<{
+    timestamp: Date;
+    status: ActionItemStatus;
+    note: string;
+    createdBy: { name: string } | null;
+  }>;
+  proofs: Array<{ file: { name: string; url: string } }>;
+}) {
   const now = Date.now();
   const dueTime = item.dueDate.getTime();
   const overdueDays = dueTime < now ? Math.floor((now - dueTime) / (24 * 60 * 60 * 1000)) : undefined;
@@ -24,13 +45,13 @@ function mapActionItem(item: any) {
     reviewer: item.reviewer?.name ?? "",
     schemeId: item.scheme.code,
     daysOverdue: overdueDays,
-    updates: item.updates.map((update: any) => ({
+    updates: item.updates.map((update) => ({
       timestamp: toIsoDate(update.timestamp),
       actor: update.createdBy?.name ?? "",
       status: update.status,
       note: update.note,
     })),
-    proofFiles: item.proofs.map((proof: any) => ({
+    proofFiles: item.proofs.map((proof) => ({
       name: proof.file.name,
       link: proof.file.url,
     })),
@@ -38,28 +59,138 @@ function mapActionItem(item: any) {
 }
 
 export async function GET() {
-  const items = await prisma.actionItem.findMany({
-    include: {
-      scheme: { select: { code: true } },
-      vertical: { select: { name: true } },
-      assignedTo: { select: { name: true } },
-      reviewer: { select: { name: true } },
-      updates: {
-        orderBy: { timestamp: "asc" },
-        include: {
-          createdBy: { select: { name: true } },
-        },
-      },
-      proofs: {
-        include: {
-          file: { select: { name: true, url: true } },
-        },
-      },
-    },
-    orderBy: [{ dueDate: "asc" }, { title: "asc" }],
-  });
+  try {
+    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
 
-  return NextResponse.json({
-    items: items.map(mapActionItem),
-  });
+    const items = await prisma.actionItem.findMany({
+      include: {
+        scheme: { select: { code: true } },
+        vertical: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+        reviewer: { select: { name: true } },
+        updates: {
+          orderBy: { timestamp: "asc" },
+          include: {
+            createdBy: { select: { name: true } },
+          },
+        },
+        proofs: {
+          include: {
+            file: { select: { name: true, url: true } },
+          },
+        },
+      },
+      orderBy: [{ dueDate: "asc" }, { title: "asc" }],
+    });
+
+    return NextResponse.json({
+      items: items.map(mapActionItem),
+    });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+}
+
+type CreateBody = {
+  meetingId: string;
+  schemeCode: string;
+  subschemeCode?: string | null;
+  title: string;
+  description: string;
+  priority: ActionItemPriority;
+  dueDate: string;
+  assignedToUserCode: string;
+  reviewerUserCode: string;
+  itemType?: ActionItemType;
+};
+
+export async function POST(request: NextRequest) {
+  try {
+    await requireAnyPermission("CREATE_ACTION_ITEMS");
+
+    const body = (await request.json()) as CreateBody;
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(request);
+
+    const scheme = await prisma.scheme.findUnique({
+      where: { code: body.schemeCode },
+      include: { vertical: true, subschemes: true },
+    });
+    if (!scheme) {
+      return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
+    }
+
+    let subschemeId: string | null = null;
+    if (body.subschemeCode?.trim()) {
+      const code = body.subschemeCode.trim();
+      const sub = scheme.subschemes.find((s) => s.code.toUpperCase() === code.toUpperCase());
+      if (!sub) {
+        return NextResponse.json({ detail: "Subscheme not found" }, { status: 404 });
+      }
+      subschemeId = sub.id;
+    }
+
+    const meeting = await prisma.dashboardMeeting.findUnique({ where: { id: body.meetingId } });
+    if (!meeting) {
+      return NextResponse.json({ detail: "Meeting not found" }, { status: 404 });
+    }
+
+    const assignedTo = await prisma.user.findFirst({ where: { code: body.assignedToUserCode } });
+    const reviewer = await prisma.user.findFirst({ where: { code: body.reviewerUserCode } });
+    if (!assignedTo || !reviewer) {
+      return NextResponse.json({ detail: "Assignee or reviewer user not found" }, { status: 400 });
+    }
+
+    const dueDate = new Date(`${body.dueDate}T00:00:00.000Z`);
+
+    const created = await prisma.actionItem.create({
+      data: {
+        meetingId: body.meetingId,
+        schemeId: scheme.id,
+        subschemeId,
+        verticalId: scheme.verticalId,
+        itemType: body.itemType ?? ActionItemType.action_item,
+        title: body.title.trim(),
+        description: body.description.trim(),
+        priority: body.priority,
+        dueDate,
+        status: ActionItemStatus.OPEN,
+        assignedToId: assignedTo.id,
+        reviewerId: reviewer.id,
+        createdById: actor?.id ?? null,
+      },
+    });
+
+    await prisma.actionItemUpdate.create({
+      data: {
+        actionItemId: created.id,
+        timestamp: new Date(),
+        status: ActionItemStatus.OPEN,
+        note: "Action item created",
+        createdById: actor?.id ?? null,
+      },
+    });
+
+    await logAudit(
+      actor?.id,
+      "action_item.create",
+      "action_item",
+      created.id,
+      null,
+      { id: created.id, title: created.title, schemeId: scheme.id, meetingId: body.meetingId },
+      { ...auditContext, meetingId: body.meetingId, schemeId: scheme.id },
+    );
+
+    return NextResponse.json({ id: created.id }, { status: 201 });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
 }

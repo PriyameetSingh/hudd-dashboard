@@ -1,19 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ActionItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getDbUserBySession } from "@/lib/server-rbac";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, hasPermission, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
 type Body = {
-  status?: "OPEN" | "IN_PROGRESS" | "PROOF_UPLOADED" | "UNDER_REVIEW" | "COMPLETED" | "OVERDUE";
+  status?: ActionItemStatus;
   note?: string;
+  reviewerDecision?: "approve" | "reject";
+  rejectionReason?: string;
 };
 
 function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function mapActionItem(item: any) {
+function mapActionItem(item: {
+  id: string;
+  title: string;
+  description: string;
+  vertical: { name: string } | null;
+  priority: string;
+  dueDate: Date;
+  status: ActionItemStatus;
+  assignedTo: { name: string; id: string } | null;
+  reviewer: { name: string; id: string } | null;
+  scheme: { code: string };
+  updates: Array<{
+    timestamp: Date;
+    status: ActionItemStatus;
+    note: string;
+    createdBy: { name: string } | null;
+  }>;
+  proofs: Array<{ file: { name: string; url: string } }>;
+}) {
   const now = Date.now();
   const dueTime = item.dueDate.getTime();
   const overdueDays = dueTime < now ? Math.floor((now - dueTime) / (24 * 60 * 60 * 1000)) : undefined;
@@ -28,15 +50,17 @@ function mapActionItem(item: any) {
     status: item.status,
     assignedTo: item.assignedTo?.name ?? "",
     reviewer: item.reviewer?.name ?? "",
+    assignedToUserId: item.assignedTo?.id,
+    reviewerUserId: item.reviewer?.id,
     schemeId: item.scheme.code,
     daysOverdue: overdueDays,
-    updates: item.updates.map((update: any) => ({
+    updates: item.updates.map((update) => ({
       timestamp: toIsoDate(update.timestamp),
       actor: update.createdBy?.name ?? "",
       status: update.status,
       note: update.note,
     })),
-    proofFiles: item.proofs.map((proof: any) => ({
+    proofFiles: item.proofs.map((proof) => ({
       name: proof.file.name,
       link: proof.file.url,
     })),
@@ -49,8 +73,8 @@ async function getActionItemById(id: string) {
     include: {
       scheme: { select: { code: true } },
       vertical: { select: { name: true } },
-      assignedTo: { select: { name: true } },
-      reviewer: { select: { name: true } },
+      assignedTo: { select: { name: true, id: true } },
+      reviewer: { select: { name: true, id: true } },
       updates: {
         orderBy: { timestamp: "asc" },
         include: {
@@ -67,43 +91,126 @@ async function getActionItemById(id: string) {
 }
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const item = await getActionItemById(id);
-  if (!item) {
-    return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
+  try {
+    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+
+    const { id } = await ctx.params;
+    const item = await getActionItemById(id);
+    if (!item) {
+      return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
+    }
+    return NextResponse.json({ item: mapActionItem(item) });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
   }
-  return NextResponse.json({ item: mapActionItem(item) });
 }
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const body = (await request.json()) as Body;
+  try {
+    const { id } = await ctx.params;
+    const body = (await request.json()) as Body;
 
-  const current = await prisma.actionItem.findUnique({ where: { id } });
-  if (!current) {
-    return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
-  }
-
-  const actor = await getDbUserBySession();
-
-  if (body.status && body.status !== current.status) {
-    await prisma.actionItem.update({
+    const current = await prisma.actionItem.findUnique({
       where: { id },
-      data: { status: body.status },
+      include: { assignedTo: true, reviewer: true },
     });
-  }
+    if (!current) {
+      return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
+    }
 
-  if (body.note && body.note.trim().length > 0) {
-    await prisma.actionItemUpdate.create({
-      data: {
-        actionItemId: id,
-        timestamp: new Date(),
-        status: body.status ?? current.status,
-        note: body.note,
-        createdById: actor?.id ?? null,
-      },
-    });
-  }
+    const actor = await getDbUserBySession();
+    if (!actor) {
+      return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
 
-  return NextResponse.json({ ok: true });
+    const auditContext = getAuditRequestContext(request);
+    const beforeStatus = current.status;
+
+    const isAssignee = current.assignedToId === actor.id;
+    const isReviewer = current.reviewerId === actor.id;
+    const canApprove = await hasPermission("APPROVE_ACTION_ITEMS");
+
+    if (body.reviewerDecision === "approve" || body.reviewerDecision === "reject") {
+      if (!isReviewer && !canApprove) {
+        return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
+      }
+      if (body.reviewerDecision === "reject" && !body.rejectionReason?.trim()) {
+        return NextResponse.json({ detail: "Rejection reason is required" }, { status: 400 });
+      }
+      const nextStatus = body.reviewerDecision === "approve" ? ActionItemStatus.COMPLETED : ActionItemStatus.IN_PROGRESS;
+      await prisma.actionItem.update({
+        where: { id },
+        data: { status: nextStatus },
+      });
+      await prisma.actionItemUpdate.create({
+        data: {
+          actionItemId: id,
+          timestamp: new Date(),
+          status: nextStatus,
+          note:
+            body.reviewerDecision === "approve"
+              ? "Reviewer approved completion"
+              : `Reviewer rejected: ${body.rejectionReason}`,
+          createdById: actor.id,
+        },
+      });
+      await logAudit(
+        actor.id,
+        "action_item.review",
+        "action_item",
+        id,
+        { status: beforeStatus },
+        { status: nextStatus, decision: body.reviewerDecision },
+        { ...auditContext, meetingId: current.meetingId, schemeId: current.schemeId },
+      );
+      const item = await getActionItemById(id);
+      return NextResponse.json({ item: item ? mapActionItem(item) : null });
+    }
+
+    if (body.status || (body.note && body.note.trim())) {
+      const canUpdate = isAssignee || (await hasPermission("UPDATE_ACTION_ITEMS"));
+      if (!canUpdate) {
+        return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
+      }
+      if (body.status && body.status !== current.status) {
+        await prisma.actionItem.update({
+          where: { id },
+          data: { status: body.status },
+        });
+      }
+      if (body.note && body.note.trim().length > 0) {
+        await prisma.actionItemUpdate.create({
+          data: {
+            actionItemId: id,
+            timestamp: new Date(),
+            status: body.status ?? current.status,
+            note: body.note,
+            createdById: actor.id,
+          },
+        });
+      }
+      await logAudit(
+        actor.id,
+        "action_item.update",
+        "action_item",
+        id,
+        { status: beforeStatus },
+        { status: body.status ?? current.status },
+        { ...auditContext, meetingId: current.meetingId, schemeId: current.schemeId },
+      );
+    }
+
+    const item = await getActionItemById(id);
+    return NextResponse.json({ item: item ? mapActionItem(item) : null });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
 }

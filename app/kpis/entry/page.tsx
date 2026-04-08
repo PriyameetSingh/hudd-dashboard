@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole } from "@/lib/auth";
-import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
+import { fetchKPISubmissions, submitKPIMeasurement } from "@/src/lib/services/kpiService";
 import { KPISubmission } from "@/types";
 import StatusBadge from "@/src/components/ui/StatusBadge";
 
@@ -22,18 +22,41 @@ interface RowState {
 export default function KPIEntryPage() {
   const user = useRequireRole([UserRole.NODAL_OFFICER], "/dashboard");
   const [submissions, setSubmissions] = useState<KPISubmission[]>([]);
+  const [financialYearLabel, setFinancialYearLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [cardState, setCardState] = useState<Record<string, SchemeCardState>>({});
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [binaryResponses, setBinaryResponses] = useState<Record<string, boolean | null>>({});
+  const [numeratorById, setNumeratorById] = useState<Record<string, number | "">>({});
+  const [denominatorById, setDenominatorById] = useState<Record<string, number | "">>({});
+  const [remarksById, setRemarksById] = useState<Record<string, string>>({});
+
+  const reload = async () => {
+    const data = await fetchKPISubmissions();
+    setSubmissions(data.submissions);
+    setFinancialYearLabel(data.financialYearLabel);
+    const num: Record<string, number | ""> = {};
+    const den: Record<string, number | ""> = {};
+    const rem: Record<string, string> = {};
+    for (const s of data.submissions) {
+      num[s.id] = s.numerator ?? "";
+      den[s.id] = s.denominator ?? "";
+      rem[s.id] = s.remarks ?? "";
+    }
+    setNumeratorById(num);
+    setDenominatorById(den);
+    setRemarksById(rem);
+  };
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const data = await fetchKPISubmissions();
+        await reload();
+      } catch (e: unknown) {
         if (!active) return;
-        setSubmissions(data);
+        setLoadError(e instanceof Error ? e.message : "Failed to load KPIs");
       } finally {
         if (active) setLoading(false);
       }
@@ -66,30 +89,54 @@ export default function KPIEntryPage() {
     return { total, submitted };
   }, [submissions]);
 
-  const handleSave = (scheme: string) => {
+  const handleSave = async (scheme: string) => {
     setCardState((prev) => ({ ...prev, [scheme]: { saving: true } }));
-    setTimeout(() => {
+    try {
+      await reload();
       setCardState((prev) => ({ ...prev, [scheme]: { saved: true } }));
       setTimeout(() => {
         setCardState((prev) => ({ ...prev, [scheme]: { saved: false } }));
       }, 1600);
-    }, 700);
+    } catch {
+      setCardState((prev) => ({ ...prev, [scheme]: {} }));
+    } finally {
+      setCardState((prev) => ({ ...prev, [scheme]: { saving: false } }));
+    }
   };
 
-  const handleRowAction = (id: string, mode: "draft" | "submit") => {
+  const handleRowAction = async (id: string, mode: "draft" | "submit") => {
+    const item = submissions.find((row) => row.id === id);
+    if (!item || !financialYearLabel) {
+      return;
+    }
     setRowState((prev) => ({ ...prev, [id]: { saving: true } }));
-    setTimeout(() => {
+    try {
+      const measuredAt = new Date().toISOString().slice(0, 10);
+      const num = numeratorById[id] === "" ? null : Number(numeratorById[id]);
+      const den =
+        item.denominator != null
+          ? undefined
+          : denominatorById[id] === "" || denominatorById[id] === undefined
+            ? undefined
+            : Number(denominatorById[id]);
+      await submitKPIMeasurement({
+        kpiDefinitionId: item.id,
+        financialYearLabel,
+        measuredAt,
+        numeratorValue: Number.isFinite(num as number) ? num : null,
+        denominatorValue: den,
+        yesValue: item.type === "BINARY" ? binaryResponses[id] ?? null : null,
+        remarks: remarksById[id] ?? "",
+        workflowStatus: mode === "draft" ? "draft" : "submitted",
+      });
+      await reload();
       setRowState((prev) => ({
         ...prev,
         [id]: { saving: false, saved: mode === "draft", submitted: mode === "submit" },
       }));
-      setTimeout(() => {
-        setRowState((prev) => ({
-          ...prev,
-          [id]: { saving: false, saved: false, submitted: prev[id]?.submitted },
-        }));
-      }, 1400);
-    }, 600);
+    } catch {
+      setRowState((prev) => ({ ...prev, [id]: { saving: false } }));
+    }
   };
 
   return (
@@ -112,6 +159,11 @@ export default function KPIEntryPage() {
         {loading && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-muted)]">
             Loading KPI templates...
+          </div>
+        )}
+        {loadError && (
+          <div className="rounded-2xl border border-[var(--alert-critical)] bg-[var(--bg-card)] p-4 text-sm text-[var(--alert-critical)]">
+            {loadError}
           </div>
         )}
 
@@ -151,7 +203,12 @@ export default function KPIEntryPage() {
                     {items.map((item) => {
                     const row = rowState[item.id];
                     const binaryValue = binaryResponses[item.id] ?? item.yes ?? null;
-                    const computed = item.numerator && item.denominator ? ((item.numerator / item.denominator) * 100).toFixed(1) : "0.0";
+                    const numVal = numeratorById[item.id] === "" ? null : Number(numeratorById[item.id]);
+                    const denVal = denominatorById[item.id] === "" ? null : Number(denominatorById[item.id]);
+                    const computed =
+                      numVal != null && denVal != null && !Number.isNaN(numVal) && !Number.isNaN(denVal) && denVal !== 0
+                        ? ((numVal / denVal) * 100).toFixed(1)
+                        : "0.0";
                     return (
                     <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
                       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -182,7 +239,8 @@ export default function KPIEntryPage() {
                             Remarks
                             <input
                               type="text"
-                              defaultValue={item.remarks ?? ""}
+                              value={remarksById[item.id] ?? ""}
+                              onChange={(e) => setRemarksById((prev) => ({ ...prev, [item.id]: e.target.value }))}
                               className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
                             />
                           </label>
@@ -193,7 +251,10 @@ export default function KPIEntryPage() {
                             Numerator
                             <input
                               type="number"
-                              defaultValue={item.numerator ?? undefined}
+                              value={numeratorById[item.id] ?? ""}
+                              onChange={(e) =>
+                                setNumeratorById((prev) => ({ ...prev, [item.id]: e.target.value === "" ? "" : Number(e.target.value) }))
+                              }
                               className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
                             />
                           </label>
@@ -201,22 +262,29 @@ export default function KPIEntryPage() {
                             Denominator
                             <input
                               type="number"
-                              defaultValue={item.denominator ?? undefined}
-                              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                              value={denominatorById[item.id] ?? ""}
+                              onChange={(e) =>
+                                setDenominatorById((prev) => ({ ...prev, [item.id]: e.target.value === "" ? "" : Number(e.target.value) }))
+                              }
+                              readOnly={item.denominator != null}
+                              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] disabled:opacity-60"
                             />
                           </label>
                           <label className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
                             Remarks
                             <input
                               type="text"
-                              defaultValue={item.remarks ?? ""}
+                              value={remarksById[item.id] ?? ""}
+                              onChange={(e) => setRemarksById((prev) => ({ ...prev, [item.id]: e.target.value }))}
                               className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
                             />
                           </label>
                         </div>
                       )}
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
-                        <span>Computed: {item.numerator ?? 0} / {item.denominator ?? 0} = {computed}%</span>
+                        <span>
+                          Computed: {numVal ?? 0} / {denVal ?? 0} = {computed}%
+                        </span>
                         <div className="flex items-center gap-2">
                           <button
                             className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
-import { getActionItemById } from "@/src/lib/services/actionItemService";
+import { addActionItemProof, getActionItemById, updateActionItem } from "@/src/lib/services/actionItemService";
 import { ActionItem, UserRole } from "@/types";
 import { MOCK_USERS } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
@@ -51,6 +51,12 @@ export default function ActionItemDetailPage() {
   const [confirmReject, setConfirmReject] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [rejectComment, setRejectComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    const data = await getActionItemById(id);
+    setItem(data ?? null);
+  };
 
   useEffect(() => {
     let active = true;
@@ -181,7 +187,9 @@ export default function ActionItemDetailPage() {
                 {item.proofFiles.map((file) => (
                   <div key={file.name} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
                     <span>{file.name}</span>
-                    <span className="text-xs text-[var(--text-muted)]">View</span>
+                    <a href={file.link} target="_blank" rel="noreferrer" className="text-xs text-[var(--text-primary)] underline">
+                      Open
+                    </a>
                   </div>
                 ))}
               </div>
@@ -189,15 +197,41 @@ export default function ActionItemDetailPage() {
             {isNodal && !isViewer && (
               <>
                 <button
-                  className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)]"
-                  onClick={() => setActionSuccess("Marked as in progress. Field team notified.")}
+                  className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)] disabled:opacity-50"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await updateActionItem(id, { status: "IN_PROGRESS", note: "Marked in progress" });
+                      await refresh();
+                      setActionSuccess("Marked as in progress.");
+                    } catch (e: unknown) {
+                      setActionSuccess(e instanceof Error ? e.message : "Update failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
                 >
                   Mark In Progress
                 </button>
                 <ProofUpload
                   accept="application/pdf,image/*,*/*"
-                  disabled={isViewer}
-                  onUpload={() => setActionSuccess("Proof uploaded. Awaiting reviewer validation.")}
+                  disabled={isViewer || busy}
+                  onUpload={async (files) => {
+                    const f = files[0];
+                    if (!f) return;
+                    setBusy(true);
+                    try {
+                      const url = typeof window !== "undefined" ? URL.createObjectURL(f) : "";
+                      await addActionItemProof(id, { name: f.name, url: url || `https://local.invalid/${encodeURIComponent(f.name)}` });
+                      await refresh();
+                      setActionSuccess("Proof uploaded.");
+                    } catch (e: unknown) {
+                      setActionSuccess(e instanceof Error ? e.message : "Upload failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
                 />
                 <button
                   className="w-full rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
@@ -262,9 +296,18 @@ export default function ActionItemDetailPage() {
         message="This action item will be marked as completed and moved to the completed queue."
         confirmLabel="Confirm & Close"
         onCancel={() => setConfirmClose(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setConfirmClose(false);
-          setActionSuccess("Action item marked as completed.");
+          setBusy(true);
+          try {
+            await updateActionItem(id, { status: "UNDER_REVIEW", note: "Submitted for reviewer approval" });
+            await refresh();
+            setActionSuccess("Submitted for review.");
+          } catch (e: unknown) {
+            setActionSuccess(e instanceof Error ? e.message : "Update failed");
+          } finally {
+            setBusy(false);
+          }
         }}
       />
       <ConfirmModal
@@ -273,9 +316,18 @@ export default function ActionItemDetailPage() {
         message="This action item will be marked as approved and closed."
         confirmLabel="Approve"
         onCancel={() => setConfirmApprove(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setConfirmApprove(false);
-          setActionSuccess("Action item approved and closed.");
+          setBusy(true);
+          try {
+            await updateActionItem(id, { reviewerDecision: "approve" });
+            await refresh();
+            setActionSuccess("Action item approved and closed.");
+          } catch (e: unknown) {
+            setActionSuccess(e instanceof Error ? e.message : "Approval failed");
+          } finally {
+            setBusy(false);
+          }
         }}
       />
       <ConfirmModal
@@ -285,10 +337,19 @@ export default function ActionItemDetailPage() {
         confirmLabel="Reject"
         tone="danger"
         onCancel={() => setConfirmReject(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setConfirmReject(false);
-          setActionSuccess("Action item rejected with comment.");
-          setRejectComment("");
+          setBusy(true);
+          try {
+            await updateActionItem(id, { reviewerDecision: "reject", rejectionReason: rejectComment });
+            await refresh();
+            setActionSuccess("Action item rejected with comment.");
+            setRejectComment("");
+          } catch (e: unknown) {
+            setActionSuccess(e instanceof Error ? e.message : "Reject failed");
+          } finally {
+            setBusy(false);
+          }
         }}
       />
     </AppShell>

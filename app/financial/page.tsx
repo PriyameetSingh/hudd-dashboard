@@ -6,8 +6,6 @@ import { useRequireAuth } from "@/src/lib/route-guards";
 import { getFinancialEntries } from "@/src/lib/services/financialService";
 import { FinancialEntry } from "@/types";
 import { UserRole } from "@/lib/auth";
-import StatusBadge from "@/src/components/ui/StatusBadge";
-
 function formatCurrency(value: number) {
   return `₹${value.toFixed(1)} Cr`;
 }
@@ -16,14 +14,19 @@ export default function FinancialOverviewPage() {
   const user = useRequireAuth();
   const [entries, setEntries] = useState<FinancialEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
+        setLoadError(null);
         const data = await getFinancialEntries();
         if (!active) return;
         setEntries(data);
+      } catch (e) {
+        if (!active) return;
+        setLoadError(e instanceof Error ? e.message : "Could not load financial data.");
       } finally {
         if (active) setLoading(false);
       }
@@ -85,21 +88,27 @@ export default function FinancialOverviewPage() {
           {loading && (
             <div className="mt-4 text-sm text-[var(--text-muted)]">Loading financial data...</div>
           )}
-          {!loading && entries.length === 0 && (
+          {!loading && loadError && (
+            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {loadError}
+            </div>
+          )}
+          {!loading && !loadError && entries.length === 0 && (
             <div className="mt-4 text-sm text-[var(--text-muted)]">No financial records available.</div>
           )}
 
-          {!loading && entries.length > 0 && (
+          {!loading && !loadError && entries.length > 0 && (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
                   <tr className="border-b border-[var(--border)]">
                     <th className="py-3 pr-4">Scheme</th>
                     <th className="py-3 pr-4">Vertical</th>
+                    <th className="py-3 pr-4">Sector</th>
                     <th className="py-3 pr-4">Budget (₹ Cr)</th>
                     <th className="py-3 pr-4">SO (₹ Cr)</th>
                     <th className="py-3 pr-4">IFMS (₹ Cr)</th>
-                    <th className="py-3">Status</th>
+                    <th className="py-3">% as per IFMS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,11 +116,12 @@ export default function FinancialOverviewPage() {
                     <tr key={entry.id} className="border-b border-[var(--border)] text-[var(--text-primary)]">
                       <td className="py-3 pr-4 font-medium">{entry.scheme}</td>
                       <td className="py-3 pr-4 text-[var(--text-muted)]">{entry.vertical}</td>
+                      <td className="py-3 pr-4 text-[var(--text-muted)]">{}</td>
                       <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.annualBudget.toFixed(1)}</td>
                       <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.so.toFixed(1)}</td>
                       <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.ifms.toFixed(1)}</td>
                       <td className="py-3">
-                        <StatusBadge status={entry.status} />
+                        {entry.annualBudget ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1) : "0.0"}%
                       </td>
                     </tr>
                   ))}

@@ -49,6 +49,8 @@ const ROLES = [
       "EXPORT_REPORTS",
       "VIEW_COMMAND_CENTRE",
       "VIEW_ANALYTICS",
+      "APPROVE_KPI",
+      "APPROVE_ACTION_ITEMS",
     ],
   },
   {
@@ -65,12 +67,22 @@ const ROLES = [
       "EXPORT_REPORTS",
       "VIEW_COMMAND_CENTRE",
       "VIEW_ANALYTICS",
+      "APPROVE_KPI",
+      "APPROVE_ACTION_ITEMS",
     ],
   },
   {
     code: "AS",
     name: "Additional Secretary",
-    permissions: ["VIEW_ALL_DATA", "ENTER_FINANCIAL_DATA", "MANAGE_SCHEMES", "EXPORT_REPORTS", "VIEW_ANALYTICS"],
+    permissions: [
+      "VIEW_ALL_DATA",
+      "ENTER_FINANCIAL_DATA",
+      "MANAGE_SCHEMES",
+      "EXPORT_REPORTS",
+      "VIEW_ANALYTICS",
+      "APPROVE_KPI",
+      "APPROVE_ACTION_ITEMS",
+    ],
   },
   {
     code: "FA",
@@ -80,7 +92,14 @@ const ROLES = [
   {
     code: "TASU",
     name: "TASU",
-    permissions: ["VIEW_ASSIGNED_DATA", "CREATE_ACTION_ITEMS", "UPDATE_ACTION_ITEMS", "VIEW_ANALYTICS", "MANAGE_PERMISSIONS"],
+    permissions: [
+      "VIEW_ASSIGNED_DATA",
+      "CREATE_ACTION_ITEMS",
+      "UPDATE_ACTION_ITEMS",
+      "APPROVE_ACTION_ITEMS",
+      "VIEW_ANALYTICS",
+      "MANAGE_PERMISSIONS",
+    ],
   },
   {
     code: "NODAL_OFFICER",
@@ -90,7 +109,7 @@ const ROLES = [
   {
     code: "DIRECTOR",
     name: "Director",
-    permissions: ["VIEW_ALL_DATA", "VIEW_ANALYTICS", "EXPORT_REPORTS"],
+    permissions: ["VIEW_ALL_DATA", "VIEW_ANALYTICS", "EXPORT_REPORTS", "APPROVE_KPI"],
   },
   {
     code: "VIEWER",

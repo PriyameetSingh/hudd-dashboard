@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
-import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
+import { fetchKPISubmissions, reviewKpiMeasurement } from "@/src/lib/services/kpiService";
 import { KPISubmission } from "@/types";
 import { UserRole } from "@/lib/auth";
 import StatusBadge from "@/src/components/ui/StatusBadge";
@@ -22,6 +22,7 @@ export default function KPIsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -29,7 +30,7 @@ export default function KPIsPage() {
       try {
         const data = await fetchKPISubmissions();
         if (!active) return;
-        setSubmissions(data);
+        setSubmissions(data.submissions);
       } finally {
         if (active) setLoading(false);
       }
@@ -195,23 +196,50 @@ export default function KPIsPage() {
                       <p className="mt-1 text-sm text-[var(--text-primary)]">{item.unit}</p>
                     </div>
                   </div>
-                  {!isViewer && (
+                  {!isViewer && item.latestMeasurementId && (
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
-                        onClick={() => setActionMessage(`Approved ${item.scheme} — ${item.description}.`)}
+                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] disabled:opacity-50"
+                        disabled={reviewBusyId === item.id}
+                        onClick={async () => {
+                          if (!item.latestMeasurementId) return;
+                          setReviewBusyId(item.id);
+                          try {
+                            await reviewKpiMeasurement(item.latestMeasurementId, { decision: "approve" });
+                            const data = await fetchKPISubmissions();
+                            setSubmissions(data.submissions);
+                            setActionMessage(`Approved ${item.scheme} — ${item.description}.`);
+                          } catch (e: unknown) {
+                            setActionMessage(e instanceof Error ? e.message : "Approval failed");
+                          } finally {
+                            setReviewBusyId(null);
+                          }
+                        }}
                       >
-                        Quick Approve
+                        {reviewBusyId === item.id ? "Working..." : "Approve"}
                       </button>
                       <button
-                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
-                        onClick={() => setActionMessage(`Marked for review: ${item.scheme} — ${item.description}.`)}
-                      >
-                        Review & Approve
-                      </button>
-                      <button
-                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
-                        onClick={() => setActionMessage(`Rejected ${item.scheme} — ${item.description} with comment.`)}
+                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] disabled:opacity-50"
+                        disabled={reviewBusyId === item.id}
+                        onClick={async () => {
+                          if (!item.latestMeasurementId) return;
+                          const note = typeof window !== "undefined" ? window.prompt("Rejection note (required)") : null;
+                          if (!note?.trim()) {
+                            setActionMessage("Rejection cancelled or empty note.");
+                            return;
+                          }
+                          setReviewBusyId(item.id);
+                          try {
+                            await reviewKpiMeasurement(item.latestMeasurementId, { decision: "reject", note });
+                            const data = await fetchKPISubmissions();
+                            setSubmissions(data.submissions);
+                            setActionMessage(`Rejected ${item.scheme} — ${item.description}.`);
+                          } catch (e: unknown) {
+                            setActionMessage(e instanceof Error ? e.message : "Reject failed");
+                          } finally {
+                            setReviewBusyId(null);
+                          }
+                        }}
                       >
                         Reject with Comment
                       </button>

@@ -1,0 +1,50 @@
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail ?? "Meeting request failed");
+  }
+  return response.json() as Promise<T>;
+}
+
+export type MeetingListItem = {
+  id: string;
+  meetingDate: string;
+  title: string | null;
+  notes: string | null;
+  createdByName: string | null;
+  topics: Array<{ id: string; topic: string }>;
+  actionItems: Array<{ id: string; title: string; status: string }>;
+};
+
+export async function fetchMeetings(): Promise<MeetingListItem[]> {
+  const response = await fetch("/api/v1/meetings", { cache: "no-store" });
+  const data = await parseResponse<{ meetings: MeetingListItem[] }>(response);
+  return data.meetings;
+}
+
+export async function createMeeting(input: {
+  meetingDate: string;
+  title?: string | null;
+  notes?: string | null;
+  topics?: Array<{ topic: string }>;
+  actionItemIds?: string[];
+}): Promise<{ id: string }> {
+  const response = await fetch("/api/v1/meetings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<{ id: string }>(response);
+}
+
+export async function updateMeeting(
+  id: string,
+  input: { meetingDate?: string; title?: string | null; notes?: string | null },
+): Promise<void> {
+  const response = await fetch(`/api/v1/meetings/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ ok: boolean }>(response);
+}

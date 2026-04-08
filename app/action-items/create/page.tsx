@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole, MOCK_USERS } from "@/lib/auth";
-import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import { createActionItem } from "@/src/lib/services/actionItemService";
+import { fetchMeetings } from "@/src/lib/services/meetingService";
+import { fetchSchemesAdmin } from "@/src/lib/services/schemeService";
 import { ActionItemPriority } from "@/types";
 import SchemeSelector from "@/src/components/ui/SchemeSelector";
 import UserSelector from "@/src/components/ui/UserSelector";
@@ -12,17 +14,11 @@ import ProofUpload from "@/src/components/ui/ProofUpload";
 import ConfirmModal from "@/src/components/ui/ConfirmModal";
 
 const PRIORITIES: ActionItemPriority[] = ["Critical", "High", "Medium", "Low"];
-const MEETINGS = [
-  "Weekly HUDD Review",
-  "ULB Acceleration Sprint",
-  "Finance Lapse Risk Review",
-  "Joint Secretary Briefing",
-];
-
 export default function ActionItemCreatePage() {
   useRequireRole([UserRole.TASU], "/action-items");
 
   const [schemes, setSchemes] = useState<string[]>([]);
+  const [meetings, setMeetings] = useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -30,7 +26,7 @@ export default function ActionItemCreatePage() {
   const [priority, setPriority] = useState<ActionItemPriority>("High");
   const [assignee, setAssignee] = useState(MOCK_USERS[0]?.id ?? "");
   const [reviewer, setReviewer] = useState(MOCK_USERS[1]?.id ?? "");
-  const [meeting, setMeeting] = useState("");
+  const [meetingId, setMeetingId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -40,11 +36,19 @@ export default function ActionItemCreatePage() {
     let active = true;
     const load = async () => {
       try {
-        const data = await fetchActionItems();
+        const [schemeData, meetingData] = await Promise.all([fetchSchemesAdmin(), fetchMeetings()]);
         if (!active) return;
-        const uniqueSchemes = Array.from(new Set(data.map((item) => item.schemeId)));
-        setSchemes(uniqueSchemes);
-        setScheme(uniqueSchemes[0] ?? "");
+        const codes = schemeData.schemes.map((s) => s.code);
+        setSchemes(codes);
+        setScheme(codes[0] ?? "");
+        const meetingOptions = meetingData.map((m) => ({
+          id: m.id,
+          label: `${m.meetingDate}${m.title ? ` — ${m.title}` : ""}`,
+        }));
+        setMeetings(meetingOptions);
+        setMeetingId(meetingOptions[0]?.id ?? "");
+      } catch {
+        if (active) setError("Could not load schemes or meetings. Check permissions.");
       } finally {
         if (active) setLoading(false);
       }
@@ -55,7 +59,7 @@ export default function ActionItemCreatePage() {
     };
   }, []);
 
-  const canSubmit = title.trim().length > 0 && description.trim().length > 0 && scheme && dueDate;
+  const canSubmit = title.trim().length > 0 && description.trim().length > 0 && scheme && dueDate && meetingId;
 
   const selectedAssignee = useMemo(() => MOCK_USERS.find((user) => user.id === assignee), [assignee]);
   const selectedReviewer = useMemo(() => MOCK_USERS.find((user) => user.id === reviewer), [reviewer]);
@@ -124,16 +128,16 @@ export default function ActionItemCreatePage() {
                 </select>
               </label>
               <label className="flex flex-col gap-2 text-sm text-[var(--text-muted)]">
-                <span className="text-xs uppercase tracking-[0.3em]">Related Meeting (optional)</span>
+                <span className="text-xs uppercase tracking-[0.3em]">Related meeting</span>
                 <select
-                  value={meeting}
-                  onChange={(event) => setMeeting(event.target.value)}
+                  value={meetingId}
+                  onChange={(event) => setMeetingId(event.target.value)}
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
                 >
-                  <option value="">None</option>
-                  {MEETINGS.map((entry) => (
-                    <option key={entry} value={entry}>
-                      {entry}
+                  <option value="">Select a meeting</option>
+                  {meetings.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
                     </option>
                   ))}
                 </select>
@@ -168,7 +172,7 @@ export default function ActionItemCreatePage() {
               className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
               onClick={() => {
                 if (!canSubmit) {
-                  setError("Please complete title, description, scheme, and due date before submitting.");
+                  setError("Please complete title, description, scheme, meeting, and due date before submitting.");
                   return;
                 }
                 setError(null);
@@ -188,10 +192,24 @@ export default function ActionItemCreatePage() {
         message="Once submitted, this action item will be visible to assigned officers and the reviewer."
         confirmLabel="Submit"
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setConfirmOpen(false);
-          setSuccess(true);
           setError(null);
+          try {
+            await createActionItem({
+              meetingId,
+              schemeCode: scheme,
+              title: title.trim(),
+              description: description.trim(),
+              priority,
+              dueDate,
+              assignedToUserCode: assignee,
+              reviewerUserCode: reviewer,
+            });
+            setSuccess(true);
+          } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Create failed");
+          }
         }}
       />
     </AppShell>
