@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { assertKpiUpdaterForScheme, userRoleIdsFromDbUser } from "@/lib/kpi-access";
+import { assertKpiUpdaterForDefinition, userRoleIdsFromDbUser } from "@/lib/kpi-access";
 import { getDbUserBySession, hasPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -34,7 +34,13 @@ export async function POST(request: NextRequest) {
     }
 
     const roleIds = userRoleIdsFromDbUser(actor);
-    await assertKpiUpdaterForScheme(definition.schemeId, actor.id, roleIds);
+    const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+    await assertKpiUpdaterForDefinition(
+      { schemeId: definition.schemeId, assignedToId: definition.assignedToId },
+      actor.id,
+      roleIds,
+      { canManageSchemes },
+    );
 
     const fy = await prisma.financialYear.findUnique({ where: { label: body.financialYearLabel } });
     if (!fy) {

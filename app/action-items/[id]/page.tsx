@@ -7,7 +7,7 @@ import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import { addActionItemProof, getActionItemById, updateActionItem } from "@/src/lib/services/actionItemService";
 import { ActionItem, UserRole } from "@/types";
-import { MOCK_USERS } from "@/lib/auth";
+import { MOCK_USERS, hasPermission, Permission } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
 import StatusBadge from "@/src/components/ui/StatusBadge";
 import PriorityBadge from "@/src/components/ui/PriorityBadge";
@@ -51,6 +51,7 @@ export default function ActionItemDetailPage() {
   const [confirmReject, setConfirmReject] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [rejectComment, setRejectComment] = useState("");
+  const [manualUpdateText, setManualUpdateText] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
@@ -82,12 +83,20 @@ export default function ActionItemDetailPage() {
   const isNodal = user?.role === UserRole.NODAL_OFFICER;
   const isReviewer = user ? [UserRole.TASU, UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user.role) : false;
 
+  const canAddManualUpdate = useMemo(() => {
+    if (!item || !user || isViewer) return false;
+    return (
+      hasPermission(user, Permission.UPDATE_ACTION_ITEMS) ||
+      matchUser(item.assignedTo)?.id === user.id
+    );
+  }, [item, user, isViewer]);
+
   const closeLabel = actionSuccess ? "Completed" : "Mark Completed";
 
   const thread = useMemo(() => {
     if (!item) return [];
-    return item.updates.map((update) => ({
-      id: `${update.timestamp}-${update.actor}`,
+    return item.updates.map((update, index) => ({
+      id: update.id ?? `${item.id}-upd-${index}`,
       author: update.actor,
       note: update.note,
       status: update.status,
@@ -273,9 +282,43 @@ export default function ActionItemDetailPage() {
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
-          <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Comment Thread</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Updates</p>
+          {canAddManualUpdate && (
+            <div className="mt-4 space-y-3">
+              <textarea
+                value={manualUpdateText}
+                onChange={(event) => setManualUpdateText(event.target.value)}
+                rows={3}
+                disabled={busy}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                placeholder="Add an update for this action item…"
+              />
+              <button
+                type="button"
+                className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-50"
+                disabled={busy || !manualUpdateText.trim().length}
+                onClick={async () => {
+                  const note = manualUpdateText.trim();
+                  if (!note) return;
+                  setBusy(true);
+                  try {
+                    await updateActionItem(id, { note });
+                    await refresh();
+                    setManualUpdateText("");
+                    setActionSuccess("Update posted.");
+                  } catch (e: unknown) {
+                    setActionSuccess(e instanceof Error ? e.message : "Could not post update");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Post update
+              </button>
+            </div>
+          )}
           <div className="mt-4 space-y-3 text-sm text-[var(--text-muted)]">
-            {thread.length === 0 && "No comments yet."}
+            {thread.length === 0 && "No updates yet."}
             {thread.map((entry) => (
               <div key={entry.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
                 <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">

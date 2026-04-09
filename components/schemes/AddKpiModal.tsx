@@ -13,10 +13,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
   scheme: SchemeOverview | null;
+  users: Array<{ id: string; code: string | null; name: string; email: string }>;
   onSaved: () => void;
 };
 
-export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
+export default function AddKpiModal({ open, onClose, scheme, users, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState<string | null>(null);
   const [description, setDescription] = useState("");
@@ -25,6 +26,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
   const [subschemeId, setSubschemeId] = useState<string>("");
   const [unit, setUnit] = useState("");
   const [denominator, setDenominator] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [reviewerId, setReviewerId] = useState("");
 
   useEffect(() => {
     if (!open || !scheme) return;
@@ -34,6 +37,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
     setSubschemeId("");
     setUnit("");
     setDenominator("");
+    setAssignedToId("");
+    setReviewerId("");
     setAlert(null);
   }, [open, scheme]);
 
@@ -42,6 +47,14 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
     const d = description.trim();
     if (!d) {
       setAlert("Description is required.");
+      return;
+    }
+    if (!assignedToId || !reviewerId) {
+      setAlert("Select both an action owner and a reviewer.");
+      return;
+    }
+    if (assignedToId === reviewerId) {
+      setAlert("Action owner and reviewer must be different users.");
       return;
     }
     setSaving(true);
@@ -58,6 +71,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
         numeratorUnit: unitTrimmed,
         denominatorUnit: unitTrimmed,
         denominatorValue: isNaN(denominatorValue as number) ? null : denominatorValue,
+        assignedToId,
+        reviewerId,
       });
       onSaved();
       onClose();
@@ -69,6 +84,8 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
   };
 
   if (!open || !scheme) return null;
+
+  const userPickerDisabled = users.length < 2;
 
   return (
     <div
@@ -105,6 +122,12 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
         {alert && (
           <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
             {alert}
+          </div>
+        )}
+
+        {userPickerDisabled && (
+          <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+            At least two active users are required in the directory to assign an action owner and reviewer.
           </div>
         )}
 
@@ -160,6 +183,48 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
           )}
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+              Action owner
+              <span className="block text-[10px] font-normal normal-case tracking-normal text-[var(--text-muted)] opacity-80">
+                Enters and updates KPI progress
+              </span>
+              <select
+                value={assignedToId}
+                onChange={(e) => setAssignedToId(e.target.value)}
+                disabled={userPickerDisabled}
+                className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] disabled:opacity-50"
+              >
+                <option value="">Select user…</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id} disabled={u.id === reviewerId}>
+                    {u.name}
+                    {u.code ? ` (${u.code})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+              Reviewer
+              <span className="block text-[10px] font-normal normal-case tracking-normal text-[var(--text-muted)] opacity-80">
+                Confirms submitted updates
+              </span>
+              <select
+                value={reviewerId}
+                onChange={(e) => setReviewerId(e.target.value)}
+                disabled={userPickerDisabled}
+                className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] disabled:opacity-50"
+              >
+                <option value="">Select user…</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id} disabled={u.id === assignedToId}>
+                    {u.name}
+                    {u.code ? ` (${u.code})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
               Unit
               <input
                 value={unit}
@@ -181,7 +246,7 @@ export default function AddKpiModal({ open, onClose, scheme, onSaved }: Props) {
           </div>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || userPickerDisabled}
             onClick={handleSubmit}
             className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-60"
           >

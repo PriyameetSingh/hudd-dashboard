@@ -109,6 +109,8 @@ export async function createKpiDefinition(input: {
   numeratorUnit?: string | null;
   denominatorUnit?: string | null;
   denominatorValue?: number | null;
+  assignedToId: string;
+  reviewerId: string;
 }): Promise<void> {
   const response = await fetch("/api/v1/kpis/definitions", {
     method: "POST",

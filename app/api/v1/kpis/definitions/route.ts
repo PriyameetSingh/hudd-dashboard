@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { KPICategory, KPIType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import {
+  userCanEnterKpiMeasurement,
+  userCanReviewKpiMeasurement,
+  userRoleIdsFromDbUser,
+} from "@/lib/kpi-access";
+import {
+  getDbUserBySession,
+  hasPermission,
+  requireAnyPermission,
+  requirePermission,
+  toAuthErrorResponse,
+} from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -41,6 +52,8 @@ export async function GET() {
   const definitions = await prisma.kpiDefinition.findMany({
     include: {
       scheme: { include: { vertical: true } },
+      assignedTo: { select: { id: true, name: true } },
+      reviewer: { select: { id: true, name: true } },
       targets: fy
         ? {
             where: { financialYearId: fy.id },
@@ -65,11 +78,31 @@ export async function GET() {
     orderBy: [{ scheme: { name: "asc" } }, { description: "asc" }],
   });
 
-  return NextResponse.json({
-    financialYearLabel: fy?.label ?? null,
-    submissions: definitions.map((definition: (typeof definitions)[number]) => {
+  const actor = await getDbUserBySession();
+  const roleIds = userRoleIdsFromDbUser(actor);
+  const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+  const canEnterPermission = await hasPermission("ENTER_KPI_DATA");
+  const canApprovePermission = await hasPermission("APPROVE_KPI");
+
+  const submissions = await Promise.all(
+    definitions.map(async (definition: (typeof definitions)[number]) => {
       const target = definition.targets[0] ?? null;
       const measurement = target?.measurements[0] ?? null;
+
+      const defPick = {
+        schemeId: definition.schemeId,
+        assignedToId: definition.assignedToId,
+        reviewerId: definition.reviewerId,
+      };
+
+      const [currentUserCanEnter, currentUserCanReview] = await Promise.all([
+        canEnterPermission
+          ? userCanEnterKpiMeasurement(defPick, actor?.id, roleIds, canManageSchemes)
+          : Promise.resolve(false),
+        canApprovePermission
+          ? userCanReviewKpiMeasurement(defPick, actor?.id, roleIds, canManageSchemes)
+          : Promise.resolve(false),
+      ]);
 
       return {
         id: definition.id,
@@ -87,8 +120,19 @@ export async function GET() {
         status: mapWorkflowStatus(measurement?.workflowStatus),
         lastUpdated: (measurement?.measuredAt ?? definition.updatedAt).toISOString().slice(0, 10),
         remarks: measurement?.remarks ?? undefined,
+        assignedToUserId: definition.assignedTo?.id ?? null,
+        assignedToName: definition.assignedTo?.name ?? null,
+        reviewerUserId: definition.reviewer?.id ?? null,
+        reviewerName: definition.reviewer?.name ?? null,
+        currentUserCanEnter,
+        currentUserCanReview,
       };
     }),
+  );
+
+  return NextResponse.json({
+    financialYearLabel: fy?.label ?? null,
+    submissions,
   });
 }
 
@@ -111,6 +155,8 @@ type CreateBody = {
   numeratorUnit?: string | null;
   denominatorUnit?: string | null;
   denominatorValue?: number | null;
+  assignedToId?: string | null;
+  reviewerId?: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -130,11 +176,33 @@ export async function POST(request: NextRequest) {
   const category = parseCategory(body.category);
   const kpiType = parseKpiType(body.kpiType);
 
+  const assignedToId = body.assignedToId?.trim() || null;
+  const reviewerId = body.reviewerId?.trim() || null;
+
   if (!schemeId || !description || !category || !kpiType) {
     return NextResponse.json(
       { detail: "schemeId, description, category (STATE|CENTRAL), and kpiType (OUTPUT|OUTCOME|BINARY) are required" },
       { status: 400 },
     );
+  }
+
+  if (!assignedToId || !reviewerId) {
+    return NextResponse.json(
+      { detail: "assignedToId and reviewerId (user ids) are required" },
+      { status: 400 },
+    );
+  }
+
+  if (assignedToId === reviewerId) {
+    return NextResponse.json({ detail: "Action owner and reviewer must be different users" }, { status: 400 });
+  }
+
+  const [assigneeUser, reviewerUser] = await Promise.all([
+    prisma.user.findFirst({ where: { id: assignedToId, isActive: true }, select: { id: true } }),
+    prisma.user.findFirst({ where: { id: reviewerId, isActive: true }, select: { id: true } }),
+  ]);
+  if (!assigneeUser || !reviewerUser) {
+    return NextResponse.json({ detail: "Assignee or reviewer user not found or inactive" }, { status: 400 });
   }
 
   const scheme = await prisma.scheme.findUnique({
@@ -170,6 +238,8 @@ export async function POST(request: NextRequest) {
       kpiType,
       numeratorUnit: body.numeratorUnit?.trim() || null,
       denominatorUnit: body.denominatorUnit?.trim() || null,
+      assignedToId,
+      reviewerId,
       createdById: actor?.id ?? null,
     },
   });

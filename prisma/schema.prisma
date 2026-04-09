@@ -104,6 +104,8 @@ model User {
   createdExpenditureSnapshots FinanceExpenditureSnapshot[] @relation("FinanceSnapshotCreatedBy")
   createdFinanceSummaryHeads FinanceSummaryHead[] @relation("FinanceSummaryCreatedBy")
   createdKpiDefinitions KpiDefinition[]        @relation("KpiDefinitionCreatedBy")
+  assignedKpiDefinitions KpiDefinition[]       @relation("KpiDefinitionAssignedTo")
+  reviewerKpiDefinitions KpiDefinition[]       @relation("KpiDefinitionReviewer")
   createdKpiMeasurements KpiMeasurement[]      @relation("KpiMeasurementCreatedBy")
   reviewedKpiMeasurements KpiMeasurement[]     @relation("KpiMeasurementReviewedBy")
   createdMeetings       DashboardMeeting[]     @relation("MeetingCreatedBy")
@@ -379,12 +381,16 @@ model KpiDefinition {
   kpiType        KPIType
   numeratorUnit  String?
   denominatorUnit String?
+  assignedToId   String?     @db.Uuid
+  reviewerId     String?     @db.Uuid
   createdById    String?     @db.Uuid
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   scheme     Scheme     @relation(fields: [schemeId], references: [id], onDelete: Cascade)
   subscheme  Subscheme? @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  assignedTo User?      @relation("KpiDefinitionAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewer   User?      @relation("KpiDefinitionReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
   createdBy  User?      @relation("KpiDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   targets KpiTarget[]

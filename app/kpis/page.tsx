@@ -43,6 +43,11 @@ export default function KPIsPage() {
     };
   }, []);
 
+  const hasReviewablePending = useMemo(
+    () => submissions.some((s) => s.status === "submitted_pending" && s.currentUserCanReview),
+    [submissions],
+  );
+
   const tabs = useMemo<TabConfig[]>(() => {
     const baseTabs: TabConfig[] = [
       { id: "all", label: "All KPIs", filter: () => true },
@@ -62,16 +67,16 @@ export default function KPIsPage() {
         filter: (item) => item.status === "not_submitted" || item.status === "draft",
       },
     ];
-    if (user?.role === UserRole.DIRECTOR) {
+    if (hasReviewablePending) {
       const pendingTab: TabConfig = {
         id: "pending_review",
         label: "Pending Review",
-        filter: (item) => item.status === "submitted_pending",
+        filter: (item) => item.status === "submitted_pending" && Boolean(item.currentUserCanReview),
       };
       return [baseTabs[0], pendingTab, ...baseTabs.slice(1)];
     }
     return baseTabs;
-  }, [user?.role]);
+  }, [hasReviewablePending]);
 
   useEffect(() => {
     if (!tabs.some((tab) => tab.id === activeTab)) {
@@ -93,9 +98,11 @@ export default function KPIsPage() {
   }, [submissions]);
 
   const isViewer = user?.role === UserRole.VIEWER;
-  const isDirector = user?.role === UserRole.DIRECTOR;
 
-  const pendingQueue = useMemo(() => submissions.filter((item) => item.status === "submitted_pending"), [submissions]);
+  const pendingQueue = useMemo(
+    () => submissions.filter((item) => item.status === "submitted_pending" && item.currentUserCanReview),
+    [submissions],
+  );
 
   return (
     <AppShell title="KPI Tracker">
@@ -163,10 +170,10 @@ export default function KPIsPage() {
           {!loading && filtered.length === 0 && (
             <div className="text-sm text-[var(--text-muted)]">No KPI submissions match this filter.</div>
           )}
-          {!loading && isDirector && activeTab === "pending_review" && (
+          {!loading && activeTab === "pending_review" && (
             <div className="space-y-4">
               {pendingQueue.length === 0 && (
-                <div className="text-sm text-[var(--text-muted)]">No KPI submissions awaiting director review.</div>
+                <div className="text-sm text-[var(--text-muted)]">No KPI submissions awaiting your review.</div>
               )}
               {pendingQueue.map((item) => (
                 <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 cursor-pointer hover:bg-[var(--bg-card)] transition" onClick={() => setViewKpi(item)}>
@@ -180,8 +187,8 @@ export default function KPIsPage() {
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-4 text-sm text-[var(--text-muted)]">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em]">Submitted By</p>
-                      <p className="mt-1 text-sm text-[var(--text-primary)]">Shri Amit Kumar</p>
+                      <p className="text-[10px] uppercase tracking-[0.3em]">Action owner</p>
+                      <p className="mt-1 text-sm text-[var(--text-primary)]">{item.assignedToName ?? "—"}</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em]">Submitted On</p>
@@ -198,7 +205,7 @@ export default function KPIsPage() {
                       <p className="mt-1 text-sm text-[var(--text-primary)]">{item.unit}</p>
                     </div>
                   </div>
-                  {!isViewer && item.latestMeasurementId && (
+                  {!isViewer && item.latestMeasurementId && item.currentUserCanReview && (
                     <div className="mt-4 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] disabled:opacity-50"
@@ -251,7 +258,7 @@ export default function KPIsPage() {
               ))}
             </div>
           )}
-          {!loading && (!isDirector || activeTab !== "pending_review") && filtered.length > 0 && (
+          {!loading && activeTab !== "pending_review" && filtered.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
@@ -294,7 +301,7 @@ export default function KPIsPage() {
       <ViewKpiModal
         open={!!viewKpi}
         submission={viewKpi}
-        isReviewer={isDirector}
+        isReviewer={viewKpi?.currentUserCanReview === true}
         onClose={() => setViewKpi(null)}
         onReviewed={async () => {
           const data = await fetchKPISubmissions();

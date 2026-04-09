@@ -42,6 +42,8 @@ export type ActionItemPriority = "Critical" | "High" | "Medium" | "Low";
 export type ActionItemStatus = "OPEN" | "IN_PROGRESS" | "PROOF_UPLOADED" | "UNDER_REVIEW" | "COMPLETED" | "OVERDUE";
 
 export interface ActionItemUpdate {
+  /** Stable id from DB; omit in legacy mocks */
+  id?: string;
   timestamp: string;
   actor: string;
   status: ActionItemStatus;
@@ -89,6 +91,15 @@ export interface KPISubmission {
   status: KPIStatus;
   lastUpdated: string;
   remarks?: string;
+  /** Present when KPI has a named action owner (same as assignedToUserId). */
+  assignedToName?: string | null;
+  reviewerName?: string | null;
+  assignedToUserId?: string | null;
+  reviewerUserId?: string | null;
+  /** Server-computed for the current session (ENTER_KPI_DATA + assignment). */
+  currentUserCanEnter?: boolean;
+  /** Server-computed for the current session (APPROVE_KPI + assignment). */
+  currentUserCanReview?: boolean;
 }
 
 export type FinancialEntryStatus =

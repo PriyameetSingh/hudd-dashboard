@@ -29,6 +29,7 @@ function mapActionItem(item: {
   reviewer: { name: string; id: string } | null;
   scheme: { code: string } | null;
   updates: Array<{
+    id: string;
     timestamp: Date;
     status: ActionItemStatus;
     note: string;
@@ -55,6 +56,7 @@ function mapActionItem(item: {
     schemeId: item.scheme?.code ?? "",
     daysOverdue: overdueDays,
     updates: item.updates.map((update) => ({
+      id: update.id,
       timestamp: toIsoDate(update.timestamp),
       actor: update.createdBy?.name ?? "",
       status: update.status,

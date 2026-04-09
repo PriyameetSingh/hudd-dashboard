@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { assertKpiUpdaterForScheme, userRoleIdsFromDbUser } from "@/lib/kpi-access";
+import { assertKpiUpdaterForDefinition, userRoleIdsFromDbUser } from "@/lib/kpi-access";
 import { getDbUserBySession, hasPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -32,9 +32,15 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
 
     const roleIds = userRoleIdsFromDbUser(actor);
-    await assertKpiUpdaterForScheme(target.kpiDefinition.schemeId, actor.id, roleIds);
+    const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+    await assertKpiUpdaterForDefinition(
+      { schemeId: target.kpiDefinition.schemeId, assignedToId: target.kpiDefinition.assignedToId },
+      actor.id,
+      roleIds,
+      { canManageSchemes },
+    );
 
-    const canOverride = await hasPermission("MANAGE_SCHEMES");
+    const canOverride = canManageSchemes;
     if (target.denominatorValue != null && !canOverride) {
       return NextResponse.json({ detail: "Denominator already set" }, { status: 409 });
     }

@@ -95,6 +95,11 @@ export default function KPIEntryPage() {
     return { total, submitted };
   }, [submissions]);
 
+  const canEditSelected = useMemo(() => {
+    if (!selectedItem) return false;
+    return selectedItem.currentUserCanEnter !== false;
+  }, [selectedItem]);
+
   const getValidationError = (item: KPISubmission, newNum: number | ""): string | null => {
     if (item.status === "approved" && item.numerator != null && newNum !== "") {
       if (Number(newNum) < item.numerator) {
@@ -107,6 +112,7 @@ export default function KPIEntryPage() {
   const handleRowAction = async (id: string, mode: "draft" | "submit") => {
     const item = submissions.find((row) => row.id === id);
     if (!item || !financialYearLabel) return;
+    if (item.currentUserCanEnter === false) return;
 
     if (item.type !== "BINARY") {
       const err = getValidationError(item, numeratorById[id] ?? "");
@@ -261,6 +267,21 @@ export default function KPIEntryPage() {
                     <h2 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">
                       {item.description}
                     </h2>
+                    {(item.assignedToName || item.reviewerName) && (
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">
+                        {item.assignedToName && (
+                          <span>
+                            Action owner: <span className="text-[var(--text-primary)]">{item.assignedToName}</span>
+                          </span>
+                        )}
+                        {item.assignedToName && item.reviewerName ? " · " : ""}
+                        {item.reviewerName && (
+                          <span>
+                            Reviewer: <span className="text-[var(--text-primary)]">{item.reviewerName}</span>
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
                       <span className="rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-1">
                         {item.type}
@@ -283,8 +304,14 @@ export default function KPIEntryPage() {
                   </div>
                 )}
 
+                {!canEditSelected && (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                    You can view this KPI, but only the assigned action owner may enter or update progress (unless an administrator overrides).
+                  </div>
+                )}
+
                 {/* Entry form */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6">
+                <div className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 ${!canEditSelected ? "pointer-events-none opacity-50" : ""}`}>
                   {item.type === "BINARY" ? (
                     <div className="space-y-4">
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Response</p>

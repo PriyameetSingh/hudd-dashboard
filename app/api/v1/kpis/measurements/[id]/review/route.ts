@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { assertKpiReviewerForScheme, userRoleIdsFromDbUser } from "@/lib/kpi-access";
-import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { assertKpiReviewerForDefinition, userRoleIdsFromDbUser } from "@/lib/kpi-access";
+import { getDbUserBySession, hasPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -42,9 +42,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
     }
 
-    const schemeId = measurement.kpiTarget.kpiDefinition.schemeId;
+    const def = measurement.kpiTarget.kpiDefinition;
     const roleIds = userRoleIdsFromDbUser(actor);
-    await assertKpiReviewerForScheme(schemeId, actor.id, roleIds);
+    const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+    await assertKpiReviewerForDefinition(
+      { schemeId: def.schemeId, reviewerId: def.reviewerId },
+      actor.id,
+      roleIds,
+      { canManageSchemes },
+    );
 
     const auditContext = getAuditRequestContext(request);
     const before = {
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       { workflowStatus: nextStatus, note: body.note ?? null },
       {
         ...auditContext,
-        schemeId,
+        schemeId: def.schemeId,
         kpiDefinitionId: measurement.kpiTarget.kpiDefinitionId,
         decision: body.decision,
       },

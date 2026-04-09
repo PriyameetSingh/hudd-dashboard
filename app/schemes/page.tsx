@@ -284,6 +284,7 @@ export default function SchemesPage() {
           open={kpiModalScheme !== null}
           onClose={() => setKpiModalScheme(null)}
           scheme={kpiModalScheme}
+          users={reference?.users ?? []}
           onSaved={reloadOverview}
         />
       </div>
