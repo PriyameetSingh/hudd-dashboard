@@ -142,6 +142,21 @@ export interface FinancialEntry {
   /** Internal id for ordering and APIs */
   schemeId?: string;
   dashboardPriority?: boolean;
+  totalSupplementCr: number;
+  effectiveBudgetCr: number;
+  supplements: Array<{
+    id: string;
+    amountCr: number;
+    reason: string;
+    referenceNo?: string;
+    createdAt: string;
+    createdByName: string;
+  }>;
+  history?: Array<{
+    asOfDate: string;
+    ifms: number;
+    so: number;
+  }>;
   subschemes?: Array<{
     id: string;
     code: string;
@@ -152,6 +167,21 @@ export interface FinancialEntry {
     ifms?: number;
     /** Budget estimate for this subscheme (₹ Cr) */
     annualBudget?: number;
+    totalSupplementCr?: number;
+    effectiveBudgetCr?: number;
+    supplements?: Array<{
+      id: string;
+      amountCr: number;
+      reason: string;
+      referenceNo?: string;
+      createdAt: string;
+      createdByName: string;
+    }>;
+    history?: Array<{
+      asOfDate: string;
+      ifms: number;
+      so: number;
+    }>;
   }>;
 }
 

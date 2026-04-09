@@ -369,22 +369,32 @@ async function main() {
     const scheme = await ensureScheme(entry.scheme, entry.verticalCode);
     const createdById = entry.submitterName ? findUserId(entry.submitterName) : null;
 
-    await prisma.financeBudget.upsert({
-      where: { schemeId_subschemeId_financialYearId: { schemeId: scheme.id, subschemeId: null, financialYearId: fy.id } },
-      update: {
-        budgetEstimateCr: entry.annualBudget,
-        locked: false,
-        createdById,
-      },
-      create: {
-        schemeId: scheme.id,
-        subschemeId: null,
-        financialYearId: fy.id,
-        budgetEstimateCr: entry.annualBudget,
-        locked: false,
-        createdById,
-      },
+    const existingBudget = await prisma.financeBudget.findFirst({
+      where: { schemeId: scheme.id, subschemeId: null, financialYearId: fy.id },
+      select: { id: true },
     });
+
+    if (existingBudget) {
+      await prisma.financeBudget.update({
+        where: { id: existingBudget.id },
+        data: {
+          budgetEstimateCr: entry.annualBudget,
+          locked: false,
+          createdById,
+        },
+      });
+    } else {
+      await prisma.financeBudget.create({
+        data: {
+          schemeId: scheme.id,
+          subschemeId: null,
+          financialYearId: fy.id,
+          budgetEstimateCr: entry.annualBudget,
+          locked: false,
+          createdById,
+        },
+      });
+    }
 
     const asOfDate = new Date(`${entry.lastUpdated}T00:00:00.000Z`);
     const existingSnapshot = await prisma.financeExpenditureSnapshot.findFirst({

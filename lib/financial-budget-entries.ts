@@ -126,6 +126,12 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
     include: { createdBy: { select: { name: true } } },
   });
 
+  const supplements = await prisma.financeBudgetSupplement.findMany({
+    where: { financialYearId: fy.id },
+    include: { createdBy: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
   const budgetsByScheme = new Map<string, typeof budgets>();
   for (const b of budgets) {
     const list = budgetsByScheme.get(b.schemeId) ?? [];
@@ -140,12 +146,21 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
     snapshotsByScheme.set(s.schemeId, list);
   }
 
+  const supplementsByScheme = new Map<string, typeof supplements>();
+  for (const s of supplements) {
+    const list = supplementsByScheme.get(s.schemeId) ?? [];
+    list.push(s);
+    supplementsByScheme.set(s.schemeId, list);
+  }
+
   const entries = schemes.map((scheme) => {
     const schemeBudgets = budgetsByScheme.get(scheme.id) ?? [];
     const schemeSnapshots = snapshotsByScheme.get(scheme.id) ?? [];
+    const schemeSupplements = supplementsByScheme.get(scheme.id) ?? [];
     const subIds = new Set(scheme.subschemes.map((s) => s.id));
 
     let annualBudget = 0;
+    let totalSupplementCr = 0;
     let latest: (typeof snapshots)[number] | null = null;
     let so = 0;
     let ifms = 0;
@@ -169,15 +184,41 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
       const subschemeDetails = scheme.subschemes.map((sub) => {
         const snap = latestBySub.get(sub.id);
         const budget = schemeBudgets.find((b) => b.subschemeId === sub.id);
+        
+        const subSups = schemeSupplements.filter((s) => s.subschemeId === sub.id);
+        const subTotalSupplementCr = subSups.reduce((acc, s) => acc + toNumber(s.amountCr), 0);
+        const annBudget = toNumber(budget?.budgetEstimateCr ?? 0);
+        const subEffectiveBudgetCr = annBudget + subTotalSupplementCr;
+
         return {
           id: sub.id,
           code: sub.code,
           name: sub.name,
           so: toNumber(snap?.soExpenditureCr ?? 0),
           ifms: toNumber(snap?.ifmsExpenditureCr ?? 0),
-          annualBudget: toNumber(budget?.budgetEstimateCr ?? 0),
+          annualBudget: annBudget,
+          totalSupplementCr: subTotalSupplementCr,
+          effectiveBudgetCr: subEffectiveBudgetCr,
+          supplements: subSups.map(s => ({
+            id: s.id,
+            amountCr: toNumber(s.amountCr),
+            reason: s.reason,
+            referenceNo: s.referenceNo ?? undefined,
+            createdAt: s.createdAt.toISOString(),
+            createdByName: s.createdBy?.name ?? "Finance Desk"
+          })),
+          history: schemeSnapshots
+            .filter((s) => s.subschemeId === sub.id)
+            .sort((a, b) => a.asOfDate.getTime() - b.asOfDate.getTime())
+            .map((s) => ({
+              asOfDate: s.asOfDate.toISOString().slice(0, 10),
+              ifms: toNumber(s.ifmsExpenditureCr),
+              so: toNumber(s.soExpenditureCr),
+            }))
         };
       });
+
+      totalSupplementCr = subschemeDetails.reduce((sum, s) => sum + (s.totalSupplementCr ?? 0), 0);
 
       if (latestBySub.size > 0) {
         so = 0;
@@ -200,8 +241,11 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
         return buildEntry({
           scheme,
           schemeBudgets,
+          schemeSupplements,
+          schemeSnapshots,
           latest,
           annualBudget,
+          totalSupplementCr,
           so,
           ifms,
           status,
@@ -217,8 +261,11 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
       return buildEntry({
         scheme,
         schemeBudgets,
+        schemeSupplements,
+        schemeSnapshots,
         latest,
         annualBudget,
+        totalSupplementCr,
         so: 0,
         ifms: 0,
         status: "not_started",
@@ -228,6 +275,10 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
     } else {
       const row = schemeBudgets.find((b) => b.subschemeId === null);
       annualBudget = row ? toNumber(row.budgetEstimateCr) : 0;
+      
+      const schemeOnlySups = schemeSupplements.filter((s) => s.subschemeId === null);
+      totalSupplementCr = schemeOnlySups.reduce((acc, s) => acc + toNumber(s.amountCr), 0);
+
       const schemeOnly = schemeSnapshots
         .filter((s) => s.subschemeId === null)
         .sort((a, b) => b.asOfDate.getTime() - a.asOfDate.getTime());
@@ -249,8 +300,11 @@ export async function getFinancialBudgetEntriesOverview(): Promise<{
     return buildEntry({
       scheme,
       schemeBudgets,
+      schemeSupplements,
+      schemeSnapshots,
       latest,
       annualBudget,
+      totalSupplementCr,
       so,
       ifms,
       status,
@@ -290,6 +344,21 @@ function buildEntry(params: {
       reason: string;
     }>;
   }>;
+  schemeSupplements: Array<{
+    id: string;
+    subschemeId: string | null;
+    amountCr: Prisma.Decimal;
+    reason: string;
+    referenceNo: string | null;
+    createdAt: Date;
+    createdBy: { name: string } | null;
+  }>;
+  schemeSnapshots: Array<{
+    subschemeId: string | null;
+    asOfDate: Date;
+    soExpenditureCr: Prisma.Decimal;
+    ifmsExpenditureCr: Prisma.Decimal;
+  }>;
   latest: {
     asOfDate: Date;
     soExpenditureCr: Prisma.Decimal;
@@ -299,13 +368,14 @@ function buildEntry(params: {
     createdBy: { name: string } | null;
   } | null;
   annualBudget: number;
+  totalSupplementCr: number;
   so: number;
   ifms: number;
   status: ReturnType<typeof deriveFinancialEntryStatus> | "not_started";
   priority: Map<string, number>;
-  subschemeDetails?: Array<{ id: string; code: string; name: string; so: number; ifms: number; annualBudget: number }>;
+  subschemeDetails?: Array<{ id: string; code: string; name: string; so: number; ifms: number; annualBudget: number; totalSupplementCr?: number; effectiveBudgetCr?: number; supplements?: Array<{id: string; amountCr: number; reason: string; referenceNo?: string; createdAt: string; createdByName: string;}>; history?: Array<{ asOfDate: string; ifms: number; so: number; }> }>;
 }): FinancialEntry {
-  const { scheme, schemeBudgets, latest, annualBudget, so, ifms, status } = params;
+  const { scheme, schemeBudgets, schemeSupplements, latest, annualBudget, totalSupplementCr, so, ifms, status } = params;
   const budgetRow = schemeBudgets.find((b) => b.subschemeId === null) ?? schemeBudgets[0];
   const locked = schemeBudgets.some((b) => b.locked);
 
@@ -326,6 +396,17 @@ function buildEntry(params: {
     note: `[${scope}] ${revision.reason}`,
   }));
 
+  const mappedSupplements = schemeSupplements
+    .filter((s) => s.subschemeId === null)
+    .map(s => ({
+      id: s.id,
+      amountCr: toNumber(s.amountCr),
+      reason: s.reason,
+      referenceNo: s.referenceNo ?? undefined,
+      createdAt: s.createdAt.toISOString(),
+      createdByName: s.createdBy?.name ?? "Finance Desk"
+    }));
+
   return {
     id: scheme.code,
     schemeId: scheme.id,
@@ -333,6 +414,17 @@ function buildEntry(params: {
     vertical: scheme.vertical.name,
     status,
     annualBudget,
+    totalSupplementCr,
+    effectiveBudgetCr: annualBudget + totalSupplementCr,
+    supplements: mappedSupplements,
+    history: params.schemeSnapshots
+      .filter((s) => s.subschemeId === null)
+      .sort((a, b) => a.asOfDate.getTime() - b.asOfDate.getTime())
+      .map((s) => ({
+        asOfDate: s.asOfDate.toISOString().slice(0, 10),
+        ifms: toNumber(s.ifmsExpenditureCr),
+        so: toNumber(s.soExpenditureCr),
+      })),
     so,
     ifms,
     lastUpdated: (latest?.asOfDate ?? budgetRow?.updatedAt ?? new Date()).toISOString().slice(0, 10),

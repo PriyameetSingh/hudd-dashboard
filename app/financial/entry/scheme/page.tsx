@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Plus, Search } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole } from "@/lib/auth";
@@ -9,8 +9,56 @@ import {
   fetchFinancialBudgets,
   submitFinancialSnapshot,
   patchFinancialBudget,
+  createFinanceBudgetSupplement,
 } from "@/src/lib/services/financialService";
 import { FinancialEntry } from "@/types";
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+);
+
+// We need a plugin for the horizontal line
+const horizontalLinePlugin = {
+  id: "horizontalLine",
+  beforeDraw: (chart: any) => {
+    const { ctx, chartArea, scales } = chart;
+    const { y } = scales;
+
+    if (chart.config.options.plugins.horizontalLine?.value !== undefined) {
+      const yValue = chart.config.options.plugins.horizontalLine.value;
+      const yPixel = y.getPixelForValue(yValue);
+
+      if (yPixel >= chartArea.top && yPixel <= chartArea.bottom) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#95a5a6"; // gray dashed line
+        ctx.moveTo(chartArea.left, yPixel);
+        ctx.lineTo(chartArea.right, yPixel);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+};
+ChartJS.register(horizontalLinePlugin);
 
 const STATUS_COLORS: Record<string, string> = {
   submitted_this_week: "#2ecc71",
@@ -23,31 +71,48 @@ const STATUS_COLORS: Record<string, string> = {
 export default function SchemeEntryPage() {
   useRequireRole([UserRole.FA], "/");
 
-  const now = new Date();
-  const monthLabel = now.toLocaleString("en-IN", { month: "long" });
-
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<FinancialEntry[]>([]);
   const [financialYearLabel, setFinancialYearLabel] = useState<string | null>(null);
   const [selected, setSelected] = useState<FinancialEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionSuccess, setSubmissionSuccess] = useState(false);
-  const [draftSaved, setDraftSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [asOfDate, setAsOfDate] = useState(now.toISOString().slice(0, 10));
+
+  // Subscheme selection
+  const [selectedSubschemeCode, setSelectedSubschemeCode] = useState<string>("");
+
+  // Card 3 state : IFMS
+  const [ifmsValue, setIfmsValue] = useState<number | "">("");
+  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
   const [remarks, setRemarks] = useState("");
 
-  // Shared expenditure + budget inputs (used for scheme or selected subscheme)
-  const [soValue, setSoValue] = useState(0);
-  const [ifmsValue, setIfmsValue] = useState(0);
-  const [budgetRevise, setBudgetRevise] = useState(false);
-  const [reviseReason, setReviseReason] = useState("");
-  const [newBudgetCr, setNewBudgetCr] = useState(0);
+  // Card 2 state : SO Edit
+  const [isEditingSO, setIsEditingSO] = useState(false);
+  const [editSoValue, setEditSoValue] = useState<number | "">("");
+  const [editSoRemarks, setEditSoRemarks] = useState("");
 
-  // Which subscheme is active (only meaningful when selected scheme has subschemes)
-  const [selectedSubschemeCode, setSelectedSubschemeCode] = useState<string>("");
+  // Card 1 state : Supplement
+  const [addingSupplement, setAddingSupplement] = useState(false);
+  const [supplementAmount, setSupplementAmount] = useState<number | "">("");
+  const [supplementReason, setSupplementReason] = useState("");
+  const [supplementRefNo, setSupplementRefNo] = useState("");
+
+  // Card 1 state: Revise Budget
+  const [revisingBudget, setRevisingBudget] = useState(false);
+  const [reviseBudgetAmount, setReviseBudgetAmount] = useState<number | "">("");
+  const [reviseBudgetReason, setReviseBudgetReason] = useState("");
+
+  // Local alert state
+  const [alertInfo, setAlertInfo] = useState<{ type: "success" | "draft" | "error", message: string } | null>(null);
+
+  const triggerAlert = (type: "success" | "draft" | "error", message: string) => {
+    setAlertInfo({ type, message });
+    if (type !== "error") {
+      setTimeout(() => setAlertInfo(null), 3500);
+    }
+  };
 
   const loadEntries = useCallback(async () => {
     try {
@@ -56,7 +121,8 @@ export default function SchemeEntryPage() {
       setFinancialYearLabel(data.financialYearLabel);
       return data;
     } catch (e: unknown) {
-      setLoadError(e instanceof Error ? e.message : "Failed to load financial data");
+      const msg = e instanceof Error ? e.message : "Failed to load financial data";
+      setLoadError(msg);
       return null;
     }
   }, []);
@@ -64,42 +130,36 @@ export default function SchemeEntryPage() {
   const applyEntry = useCallback((entry: FinancialEntry | null) => {
     setSelected(entry);
     setRemarks("");
-    setSubmissionSuccess(false);
-    setError(null);
-    setBudgetRevise(false);
-    setReviseReason("");
+    setAlertInfo(null);
+    setAddingSupplement(false);
+    setRevisingBudget(false);
+    setIsEditingSO(false);
+
     if (!entry) return;
 
     if (entry.subschemes && entry.subschemes.length > 0) {
       const first = entry.subschemes[0];
       setSelectedSubschemeCode(first.code);
-      setSoValue(first.so ?? 0);
       setIfmsValue(first.ifms ?? 0);
-      setNewBudgetCr(first.annualBudget ?? 0);
     } else {
       setSelectedSubschemeCode("");
-      setSoValue(entry.so);
       setIfmsValue(entry.ifms);
-      setNewBudgetCr(entry.annualBudget);
     }
+    setAsOfDate(new Date().toISOString().slice(0, 10));
   }, []);
 
-  const applySubscheme = useCallback(
-    (code: string, entry: FinancialEntry) => {
-      const sub = entry.subschemes?.find((s) => s.code === code);
-      if (!sub) return;
-      setSelectedSubschemeCode(code);
-      setSoValue(sub.so ?? 0);
-      setIfmsValue(sub.ifms ?? 0);
-      setNewBudgetCr(sub.annualBudget ?? 0);
-      setRemarks("");
-      setSubmissionSuccess(false);
-      setError(null);
-      setBudgetRevise(false);
-      setReviseReason("");
-    },
-    [],
-  );
+  const applySubscheme = useCallback((code: string, entry: FinancialEntry) => {
+    const sub = entry.subschemes?.find((s) => s.code === code);
+    if (!sub) return;
+    setSelectedSubschemeCode(code);
+    setIfmsValue(sub.ifms ?? 0);
+    setRemarks("");
+    setAlertInfo(null);
+    setAddingSupplement(false);
+    setRevisingBudget(false);
+    setIsEditingSO(false);
+    setAsOfDate(new Date().toISOString().slice(0, 10));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -123,399 +183,606 @@ export default function SchemeEntryPage() {
     };
   }, [applyEntry]);
 
-  const grouped = useMemo(() => {
-    return entries.reduce<Record<string, FinancialEntry[]>>((acc, entry) => {
-      const key = entry.vertical;
-      acc[key] = acc[key] ?? [];
-      if (!query || entry.scheme.toLowerCase().includes(query.toLowerCase())) {
-        acc[key].push(entry);
-      }
-      return acc;
-    }, {});
-  }, [entries, query]);
-
+  // Derived Values
   const hasSubschemes = (selected?.subschemes?.length ?? 0) > 0;
   const isBudgetLocked = selected?.locked ?? false;
 
-  const activeBudget = hasSubschemes ? newBudgetCr : selected?.annualBudget ?? 0;
-  const schemeDerivedBudget = selected?.annualBudget ?? 0;
+  const activeOriginalBudgetCr = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.annualBudget ?? 0)
+    : (selected?.annualBudget ?? 0);
 
-  const utilisation = activeBudget ? ((ifmsValue / activeBudget) * 100).toFixed(1) : "0.0";
+  const activeTotalSupplementCr = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.totalSupplementCr ?? 0)
+    : (selected?.totalSupplementCr ?? 0);
+
+  const activeEffectiveBudgetCr = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.effectiveBudgetCr ?? 0)
+    : (selected?.effectiveBudgetCr ?? 0);
+
+  const activeSupplements = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.supplements ?? [])
+    : (selected?.supplements ?? []);
+
+  const activeHistory = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.history ?? [])
+    : (selected?.history ?? []);
+
+  const currentSO = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.so ?? 0)
+    : (selected?.so ?? 0);
+
+  const currentIFMS = hasSubschemes
+    ? (selected?.subschemes?.find((s) => s.code === selectedSubschemeCode)?.ifms ?? 0)
+    : (selected?.ifms ?? 0);
+
+  const utilisation = activeEffectiveBudgetCr ? ((currentIFMS / activeEffectiveBudgetCr) * 100).toFixed(1) : "0.0";
   const lapseRisk = (100 - Number(utilisation)).toFixed(1);
+  const soPercent = activeEffectiveBudgetCr ? ((currentSO / activeEffectiveBudgetCr) * 100).toFixed(1) : "0.0";
+
+  // Aggregated supplement text
+  let supCountText = "No adjustments";
+  if (activeSupplements.length > 0) {
+    const topups = activeSupplements.filter(s => s.amountCr > 0).length;
+    const divs = activeSupplements.filter(s => s.amountCr < 0).length;
+    const parts = [];
+    if (topups > 0) parts.push(`${topups} top-up${topups > 1 ? 's' : ''}`);
+    if (divs > 0) parts.push(`${divs} diversion${divs > 1 ? 's' : ''}`);
+    supCountText = parts.join(", ");
+  }
+
+  // Submit operations
+  const handleSaveDraft = () => persistSnapshot("draft");
+  const handleSaveSubmit = () => persistSnapshot("submitted");
 
   const persistSnapshot = async (workflowStatus: "draft" | "submitted") => {
-    if (!selected || !financialYearLabel) {
-      setError("Missing scheme or financial year.");
-      return;
-    }
-    if (hasSubschemes && !selectedSubschemeCode.trim()) {
-      setError("Select a subscheme before saving.");
-      return;
-    }
-    if (budgetRevise && !reviseReason.trim()) {
-      setError("Provide a reason for the budget revision.");
-      return;
-    }
-    if (budgetRevise && newBudgetCr <= 0) {
-      setError("Enter a valid revised budget amount.");
-      return;
-    }
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      if (budgetRevise) {
-        await patchFinancialBudget({
-          schemeCode: selected.id,
-          subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
-          newBudgetCr,
-          reason: reviseReason,
-          financialYearLabel,
-        });
+    if (!selected || !financialYearLabel) return;
+    if (addingSupplement || revisingBudget || isEditingSO) {
+      if (!window.confirm("You have open unsaved forms. Proceed anyway?")) {
+        return;
       }
+    }
 
+    if (ifmsValue === "" || Number(ifmsValue) < 0) {
+      triggerAlert("error", "IFMS value must be a non-negative number.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setAlertInfo(null);
+    try {
       await submitFinancialSnapshot({
         schemeCode: selected.id,
         subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
         asOfDate,
-        soExpenditureCr: soValue,
-        ifmsExpenditureCr: ifmsValue,
+        soExpenditureCr: currentSO,
+        ifmsExpenditureCr: Number(ifmsValue),
         remarks,
         financialYearLabel,
         workflowStatus,
       });
 
       if (workflowStatus === "draft") {
-        setDraftSaved(true);
-        setTimeout(() => setDraftSaved(false), 2000);
+        triggerAlert("draft", "Draft saved.");
       } else {
-        setSubmissionSuccess(true);
-        setBudgetRevise(false);
-        setReviseReason("");
+        triggerAlert("success", "Update saved securely.");
         const data = await loadEntries();
         if (data) {
           const next = data.entries.find((e) => e.id === selected.id) ?? data.entries[0] ?? null;
-          applyEntry(next);
-          if (next && hasSubschemes && selectedSubschemeCode) {
-            applySubscheme(selectedSubschemeCode, next);
+          if (next) {
+            applyEntry(next);
+            if (hasSubschemes && selectedSubschemeCode) {
+              const sub = next.subschemes?.find(s => s.code === selectedSubschemeCode);
+              if (sub) {
+                applySubscheme(selectedSubschemeCode, next);
+              }
+            }
           }
         }
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      triggerAlert("error", e instanceof Error ? e.message : "Save failed");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleAddSupplement = async () => {
+    if (!selected || !financialYearLabel) return;
+    if (supplementAmount === "" || isNaN(Number(supplementAmount)) || Number(supplementAmount) === 0) {
+      triggerAlert("error", "Enter a valid non-zero amount.");
+      return;
+    }
+    if (!supplementReason.trim()) {
+      triggerAlert("error", "Reason is required.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await createFinanceBudgetSupplement({
+        schemeCode: selected.id,
+        subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
+        financialYearLabel,
+        amountCr: Number(supplementAmount),
+        reason: supplementReason,
+        referenceNo: supplementRefNo,
+      });
+      setAddingSupplement(false);
+      setSupplementAmount("");
+      setSupplementReason("");
+      setSupplementRefNo("");
+      await loadEntries();
+      triggerAlert("success", "Supplement added successfully.");
+    } catch (e: unknown) {
+      triggerAlert("error", e instanceof Error ? e.message : "Failed to add supplement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReviseBudget = async () => {
+    if (!selected || !financialYearLabel) return;
+    if (reviseBudgetAmount === "" || isNaN(Number(reviseBudgetAmount)) || Number(reviseBudgetAmount) <= 0) {
+      triggerAlert("error", "Enter a valid positive budget amount.");
+      return;
+    }
+    if (!reviseBudgetReason.trim()) {
+      triggerAlert("error", "Reason is required.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await patchFinancialBudget({
+        schemeCode: selected.id,
+        subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
+        financialYearLabel,
+        newBudgetCr: Number(reviseBudgetAmount),
+        reason: reviseBudgetReason
+      });
+      setRevisingBudget(false);
+      setReviseBudgetAmount("");
+      setReviseBudgetReason("");
+      await loadEntries();
+      triggerAlert("success", "Budget revised successfully.");
+    } catch (e: unknown) {
+      triggerAlert("error", e instanceof Error ? e.message : "Failed to revise budget.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateSO = async () => {
+    if (!selected || !financialYearLabel) return;
+    if (editSoValue === "" || isNaN(Number(editSoValue)) || Number(editSoValue) < 0) {
+      triggerAlert("error", "Enter a valid non-negative SO amount.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      // Per instructions SO update logic; substituting submitFinancialSnapshot for SO update
+      await submitFinancialSnapshot({
+        schemeCode: selected.id,
+        subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
+        asOfDate: new Date().toISOString().slice(0, 10),
+        soExpenditureCr: Number(editSoValue),
+        ifmsExpenditureCr: currentIFMS,
+        remarks: editSoRemarks,
+        financialYearLabel,
+        workflowStatus: "submitted",
+      });
+      setIsEditingSO(false);
+      setEditSoValue("");
+      setEditSoRemarks("");
+      await loadEntries();
+      triggerAlert("success", "SO updated successfully.");
+    } catch (e: unknown) {
+      triggerAlert("error", e instanceof Error ? e.message : "Failed to update SO.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const groupedSchemes = useMemo(() => {
+    return entries.filter(e => e.scheme.toLowerCase().includes(query.toLowerCase()));
+  }, [entries, query]);
+
+  // Chart configuration
+  const chartData = {
+    labels: activeHistory.map(h => new Date(h.asOfDate).toLocaleString('en-IN', { month: 'short', year: '2-digit' })),
+    datasets: [
+      {
+        label: "IFMS Actual",
+        data: activeHistory.map(h => h.ifms),
+        backgroundColor: "rgba(46, 204, 113, 0.8)",
+        borderRadius: 4,
+      }
+    ]
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      horizontalLine: { value: currentSO }
+    },
+    scales: {
+      x: {
+        ticks: { autoSkip: false, maxRotation: 45, minRotation: 0, font: { size: 10 } },
+        grid: { display: false }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { font: { size: 10 } }
+      }
+    }
+  };
+
   return (
-    <AppShell title="Financial Entry — Scheme Data">
-      <div className="px-6 py-8">
-        {loading && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 text-sm text-[var(--text-muted)]">
-            Loading financial entries...
-          </div>
-        )}
-        {!loading && loadError && (
-          <div className="rounded-2xl border border-[var(--alert-critical)] bg-[var(--bg-surface)] p-6 text-sm text-[var(--alert-critical)]">
-            {loadError}
-          </div>
-        )}
-        {!loading && !loadError && !selected && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 text-sm text-[var(--text-muted)]">
-            No financial entries available.
-          </div>
-        )}
-
-        {!loading && !loadError && selected && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-6 shadow-lg">
-            {submissionSuccess && (
-              <div className="mb-4 rounded-xl border border-[var(--alert-success)] bg-[rgba(0,200,83,0.1)] px-4 py-3 text-sm text-[var(--alert-success)]">
-                Entry saved and active.
-              </div>
-            )}
-            {draftSaved && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                Draft saved.
-              </div>
-            )}
-            {error && (
-              <div className="mb-4 rounded-xl border border-[var(--alert-critical)] bg-[rgba(255,59,59,0.1)] px-4 py-3 text-sm text-[var(--alert-critical)]">
-                {error}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-3 justify-between mb-6">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheme-wise Financial Entry</p>
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {selected.scheme}
-                  {hasSubschemes && selectedSubschemeCode && (
-                    <span className="ml-2 text-lg font-normal text-[var(--text-muted)]">
-                      / {selectedSubschemeCode}
-                    </span>
-                  )}
-                </h1>
-                <div className="text-sm text-[var(--text-muted)] flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.3em]">{selected.vertical}</span>
-                  <span>{financialYearLabel ? `FY ${financialYearLabel}` : "FY"}</span>
-                  <span>{monthLabel}</span>
-                </div>
-              </div>
-              {isBudgetLocked && (
-                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                  <Lock size={16} />
-                  <span>Budget locked for current FY</span>
-                </div>
-              )}
+    <AppShell title="Financial Data Entry">
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[var(--bg-document)]">
+        {/* SIDEBAR */}
+        <div className="w-72 flex-shrink-0 border-r border-[var(--border)] bg-[var(--bg-surface)] flex flex-col">
+          <div className="p-4 border-b border-[var(--border)]">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                placeholder="Search scheme..."
+                className="w-full pl-9 pr-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
             </div>
-
-            <div className="grid grid-cols-12 gap-6">
-              {/* Sidebar */}
-              <aside className="col-span-4 space-y-4">
-                <div>
-                  <label className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Search scheme</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] shadow-inner"
-                    placeholder="e.g. PMAY-U"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                </div>
-
-                {Object.entries(grouped).map(([vertical, schemes]) => (
-                  <div key={vertical} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
-                    <div className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">{vertical}</div>
-                    <div className="mt-3 space-y-1">
-                      {schemes.map((entry) => {
-                        const isActive = selected.id === entry.id;
-                        const entryHasSubs = (entry.subschemes?.length ?? 0) > 0;
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {groupedSchemes.map(entry => {
+              const isActive = selected?.id === entry.id;
+              const hasSubs = (entry.subschemes?.length ?? 0) > 0;
+              return (
+                <div key={entry.id} className="space-y-1">
+                  <button
+                    onClick={() => applyEntry(entry)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left rounded-lg transition-colors ${isActive ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'hover:bg-[rgba(0,0,0,0.02)] border border-transparent'}`}
+                  >
+                    <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{entry.scheme}</span>
+                    <span
+                      className="flex-shrink-0 w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: STATUS_COLORS[entry.status] || '#95a5a6' }}
+                    />
+                  </button>
+                  {isActive && hasSubs && (
+                    <div className="ml-4 pl-3 border-l-2 border-[var(--border)] space-y-1">
+                      {entry.subschemes?.map(sub => {
+                        const isActiveSub = sub.code === selectedSubschemeCode;
                         return (
-                          <div key={entry.id}>
-                            <button
-                              onClick={() => applyEntry(entry)}
-                              className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left transition ${
-                                isActive
-                                  ? "border-[var(--text-primary)] bg-[var(--bg-primary)]"
-                                  : "border-transparent hover:border-[var(--border)]"
-                              }`}
-                            >
-                              <div>
-                                <p className="text-sm font-semibold text-[var(--text-primary)]">{entry.scheme}</p>
-                                <p className="text-[11px] text-[var(--text-muted)]">Updated {entry.lastUpdated}</p>
-                              </div>
-                              <span
-                                className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.3em]"
-                                style={{ color: STATUS_COLORS[entry.status] ?? "#95a5a6" }}
-                              >
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: "50%",
-                                    background: STATUS_COLORS[entry.status] ?? "#95a5a6",
-                                    display: "inline-block",
-                                  }}
-                                />
-                                {entry.annualBudget
-                                  ? ((entry.ifms / entry.annualBudget) * 100).toFixed(1)
-                                  : "0.0"}
-                                %
-                              </span>
-                            </button>
-
-                            {/* Subscheme selector — shown inline under the active scheme */}
-                            {isActive && entryHasSubs && (
-                              <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-[var(--border)] pl-3">
-                                {(entry.subschemes ?? []).map((sub) => {
-                                  const isActiveSub = selectedSubschemeCode === sub.code;
-                                  const subPct = (sub.annualBudget ?? 0)
-                                    ? (((sub.ifms ?? 0) / (sub.annualBudget ?? 1)) * 100).toFixed(1)
-                                    : "0.0";
-                                  return (
-                                    <button
-                                      key={sub.code}
-                                      onClick={() => applySubscheme(sub.code, entry)}
-                                      className={`flex w-full items-center justify-between rounded-xl border px-2.5 py-1.5 text-left transition ${
-                                        isActiveSub
-                                          ? "border-[var(--text-primary)] bg-[var(--bg-surface)]"
-                                          : "border-transparent hover:border-[var(--border)]"
-                                      }`}
-                                    >
-                                      <div>
-                                        <p className="text-[12px] font-semibold text-[var(--text-primary)]">{sub.code}</p>
-                                        <p className="text-[10px] text-[var(--text-muted)] leading-tight">{sub.name}</p>
-                                      </div>
-                                      <span className="text-[10px] text-[var(--text-muted)]">{subPct}%</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            key={sub.code}
+                            onClick={() => applySubscheme(sub.code, entry)}
+                            className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${isActiveSub ? 'bg-[var(--bg-card)] font-medium text-[var(--text-primary)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-transparent hover:bg-[rgba(0,0,0,0.02)]'}`}
+                          >
+                            <span className="block font-semibold">{sub.code}</span>
+                            <span className="block truncate opacity-80">{sub.name}</span>
+                          </button>
                         );
                       })}
                     </div>
-                  </div>
-                ))}
-              </aside>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-              {/* Main entry panel */}
-              <section className="col-span-8 space-y-6">
-                {/* Budget card */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                        {hasSubschemes ? `Budget — ${selectedSubschemeCode} (₹ Cr)` : "Annual Budget (₹ Cr)"}
-                      </p>
-                      <div className="text-3xl font-bold text-[var(--text-primary)]">
-                        {(budgetRevise ? newBudgetCr : activeBudget).toLocaleString()}
+        {/* MAIN PANEL */}
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+
+          {/* ALERTS */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4">
+            {alertInfo && (
+              <div className={`px-4 py-3 rounded-lg shadow-lg border text-sm flex items-center gap-2 transition-all ${alertInfo.type === 'error' ? 'bg-[rgba(200,30,30,0.1)] border-[#f8b4b4] text-[#e74c3c]' :
+                alertInfo.type === 'success' ? 'bg-[rgba(46,204,113,0.1)] border-[#b0e8ce] text-[#2ecc71]' :
+                  'bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-primary)]'
+                }`}>
+                <span>{alertInfo.message}</span>
+              </div>
+            )}
+          </div>
+
+          {!loading && !loadError && selected && (
+            <>
+              {/* HEADER */}
+              <div className="px-8 py-6 border-b border-[var(--border)] bg-[var(--bg-document)]">
+                <div className="flex justify-between items-start gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-3">
+                      {selected.scheme}
+                    </h1>
+                    {hasSubschemes && selectedSubschemeCode && (
+                      <div className="mt-2 flex gap-2">
+                        {selected.subschemes?.map(sub => (
+                          <button
+                            key={sub.code}
+                            onClick={() => applySubscheme(sub.code, selected)}
+                            className={`px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider transition ${sub.code === selectedSubschemeCode ? 'bg-[var(--text-primary)] text-black' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+                          >
+                            {sub.code}
+                          </button>
+                        ))}
                       </div>
-                      {hasSubschemes && (
-                        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                          Scheme total (derived): ₹{schemeDerivedBudget.toLocaleString()} Cr
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] text-[var(--text-muted)]">
-                        {selected.status === "submitted_this_week" || selected.status === "submitted_pending"
-                          ? "approved"
-                          : selected.status.replace(/_/g, " ")}
-                      </span>
-                      {!isBudgetLocked && (
-                        <button
-                          className="rounded-full border border-[var(--border)] px-3 py-1 text-[10px] uppercase tracking-[0.3em]"
-                          onClick={() => {
-                            setBudgetRevise((prev) => !prev);
-                            setNewBudgetCr(activeBudget);
-                            setReviseReason("");
-                          }}
-                        >
-                          {budgetRevise ? "Cancel Revision" : "Revise"}
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
-                  {budgetRevise && (
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                      <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                        New Budget (₹ Cr)
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={newBudgetCr}
-                          onChange={(e) => setNewBudgetCr(Number(e.target.value))}
-                          className="mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                        />
-                      </label>
-                      <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                        Reason for revision
-                        <textarea
-                          className="mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                          rows={2}
-                          value={reviseReason}
-                          onChange={(e) => setReviseReason(e.target.value)}
-                        />
-                      </label>
+                  {isBudgetLocked && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-surface)] px-3 py-1.5 rounded-full border border-[var(--border)]">
+                      <Lock className="w-3.5 h-3.5" />
+                      Locked
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Expenditure inputs */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 space-y-4">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                    {hasSubschemes
-                      ? `Expenditure Update — ${selectedSubschemeCode}`
-                      : "Weekly Expenditure Update"}
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                      As per SO Order (₹ Cr)
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={soValue}
-                        onChange={(e) => setSoValue(Number(e.target.value))}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                      />
-                    </label>
-                    <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                      As per IFMS (₹ Cr)
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={ifmsValue}
-                        onChange={(e) => setIfmsValue(Number(e.target.value))}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                      />
-                    </label>
+              {/* CARDS */}
+              <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+
+                {/* CARD 1: Annual Budget */}
+                <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface)]">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">Annual Budget</h2>
+                    {!isBudgetLocked && (
+                      <button
+                        onClick={() => setRevisingBudget(true)}
+                        className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-primary)] px-3 py-1 rounded border border-[var(--border)]"
+                      >
+                        Revise Budget
+                      </button>
+                    )}
                   </div>
-                </div>
+                  <div className="p-5">
 
-                {/* Date & remarks */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                  <div className="grid grid-cols-[1.2fr_1.2fr] gap-4">
-                    <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                      Data as of
-                      <input
-                        type="date"
-                        value={asOfDate}
-                        onChange={(e) => setAsOfDate(e.target.value)}
-                        className="flex w-full items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2"
-                      />
-                    </label>
-                    <label className="space-y-1 text-[12px] text-[var(--text-muted)]">
-                      Remarks
-                      <textarea
-                        rows={2}
-                        value={remarks}
-                        onChange={(e) => setRemarks(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                      />
-                    </label>
-                  </div>
-                </div>
+                    {/* Revise Form */}
+                    {revisingBudget && (
+                      <div className="mb-5 p-4 rounded-lg bg-[rgba(0,0,0,0.02)] border border-[var(--border)]">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">Revise Budget Estimate</h3>
+                          <button onClick={() => setRevisingBudget(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]">Cancel</button>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="flex-1">
+                            <input type="number" step="0.01" min="0" placeholder="New Budget (₹ Cr)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetAmount} onChange={e => setReviseBudgetAmount(e.target.value ? Number(e.target.value) : "")} />
+                          </div>
+                          <div className="flex-[2]">
+                            <input type="text" placeholder="Reason (Required)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetReason} onChange={e => setReviseBudgetReason(e.target.value)} />
+                          </div>
+                          <button onClick={handleReviseBudget} disabled={isSubmitting} className="bg-[var(--text-primary)] text-[var(--bg-document)] font-semibold text-sm px-4 rounded-md">Confirm</button>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Summary + actions */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 grid gap-3 md:grid-cols-2">
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">% Utilised (IFMS)</p>
-                      <p className="text-2xl font-semibold text-[var(--alert-success)]">{utilisation}%</p>
+                    <div className="grid grid-cols-3 gap-6">
+                      <div>
+                        <div className="text-xs text-[var(--text-muted)] mb-1">Original</div>
+                        <div className="text-2xl font-semibold">₹ {activeOriginalBudgetCr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[var(--text-muted)] mb-1">Supplementary</div>
+                        <div className={`text-2xl font-semibold ${activeTotalSupplementCr > 0 ? 'text-[#2ecc71]' : activeTotalSupplementCr < 0 ? 'text-[#e74c3c]' : 'text-[var(--text-primary)]'}`}>
+                          {activeTotalSupplementCr > 0 ? '+' : ''}{activeTotalSupplementCr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)] mt-1 font-medium">{supCountText}</div>
+                      </div>
+                      <div className="bg-[var(--bg-surface)] border border-[var(--border)] p-3 rounded-lg flex flex-col justify-center shadow-sm">
+                        <div className="text-[11px] text-[#3498db] font-semibold mb-1 uppercase tracking-wider">Effective</div>
+                        <div className="text-2xl font-bold text-[#3498db]">₹ {activeEffectiveBudgetCr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr</div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Lapse Risk</p>
-                      <p className="text-2xl font-semibold text-[var(--alert-warning)]">{lapseRisk}%</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-3">
-                    <button
-                      className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)] disabled:opacity-60"
-                      disabled={isSubmitting}
-                      onClick={() => persistSnapshot("draft")}
-                    >
-                      Save Draft
-                    </button>
-                    <button
-                      className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
-                      onClick={() => persistSnapshot("submitted")}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? "Saving..." : "Save & Submit"}
-                    </button>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Last updated: {selected.lastUpdated} by {selected.submitter || "Finance Desk"}
-                    </p>
+
+                    {activeSupplements.length > 0 && (
+                      <div className="mt-6">
+                        <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-3 border-b border-[var(--border)] pb-2">Recent Adjustments</div>
+                        <div className="space-y-2.5">
+                          {activeSupplements.map(sup => (
+                            <div key={sup.id} className="flex items-start justify-between bg-[var(--bg-surface)] p-2.5 rounded border border-[rgba(0,0,0,0.03)]">
+                              <div>
+                                <div className="font-medium text-sm text-[var(--text-primary)]">{sup.reason}</div>
+                                <div className="text-[11px] text-[var(--text-muted)] mt-0.5 flex gap-2">
+                                  <span>{new Date(sup.createdAt).toLocaleDateString('en-IN')}</span>
+                                  <span>•</span>
+                                  <span>{sup.createdByName}</span>
+                                  {sup.referenceNo && (
+                                    <><span>•</span><span>Ref: {sup.referenceNo}</span></>
+                                  )}
+                                </div>
+                              </div>
+                              <div className={`text-sm font-bold ${sup.amountCr > 0 ? 'text-[#2ecc71]' : 'text-[#e74c3c]'}`}>
+                                {sup.amountCr > 0 ? '+' : ''}{sup.amountCr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!isBudgetLocked && !addingSupplement && (
+                      <button
+                        onClick={() => setAddingSupplement(true)}
+                        className="mt-5 text-sm font-medium text-[var(--text-primary)] flex items-center gap-1.5 hover:underline"
+                      >
+                        <Plus className="w-4 h-4" /> Add supplement
+                      </button>
+                    )}
+
+                    {addingSupplement && (
+                      <div className="mt-5 p-4 rounded-lg bg-[var(--bg-document)] border border-[var(--border)] shadow-inner">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Add Supplement</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-xs text-[var(--text-muted)] mb-1">Amount (₹ Cr) — accepts negative</label>
+                            <input type="number" step="0.01" className="w-full text-sm p-2.5 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={supplementAmount} onChange={e => setSupplementAmount(e.target.value ? Number(e.target.value) : "")} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[var(--text-muted)] mb-1">Reference No. (optional)</label>
+                            <input type="text" className="w-full text-sm p-2.5 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={supplementRefNo} onChange={e => setSupplementRefNo(e.target.value)} />
+                          </div>
+                        </div>
+                        <div className="mb-4">
+                          <label className="block text-xs text-[var(--text-muted)] mb-1">Reason</label>
+                          <textarea className="w-full text-sm p-2.5 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md resize-none h-20" value={supplementReason} onChange={e => setSupplementReason(e.target.value)} />
+                        </div>
+                        <div className="flex items-center justify-end gap-3">
+                          <button onClick={() => setAddingSupplement(false)} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium px-4 py-2">Cancel</button>
+                          <button disabled={isSubmitting} onClick={handleAddSupplement} className="bg-[#2ecc71] h-9 hover:bg-[#27ae60] text-white font-semibold text-sm px-6 rounded-md shadow-sm transition">Confirm</button>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 </div>
-              </section>
+
+                {/* CARD 2: Expenditure Status */}
+                <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden flex flex-col">
+                  <div className="px-5 py-4 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">Expenditure Status</h2>
+                  </div>
+                  <div className="p-5 flex-1 flex flex-col">
+                    <div className="grid grid-cols-2 gap-8 flex-1">
+                      {/* Left: SO */}
+                      <div className="flex flex-col border-r border-[rgba(0,0,0,0.06)] pr-8">
+                        {!isEditingSO ? (
+                          <div className="flex items-center justify-between mb-8 pb-6 border-b border-[rgba(0,0,0,0.04)]">
+                            <div>
+                              <div className="text-xs text-[var(--text-muted)] mb-1">SO Sanction Amount</div>
+                              <div className="text-3xl font-light text-[var(--text-primary)]">₹ {currentSO.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr</div>
+                            </div>
+                            <button onClick={() => setIsEditingSO(true)} className="px-4 py-1.5 rounded border border-[var(--border)] text-sm font-medium hover:bg-[var(--bg-surface)]">Edit</button>
+                          </div>
+                        ) : (
+                          <div className="bg-[rgba(52,152,219,0.05)] border border-[rgba(52,152,219,0.2)] p-4 rounded-lg mb-8">
+                            <div className="text-xs font-semibold text-[#2980b9] uppercase tracking-wider mb-3">Update Sanction Amount</div>
+                            <div className="space-y-3">
+                              <input type="number" step="0.01" min="0" placeholder="New SO Amount (₹ Cr)" className="w-full text-sm p-2 bg-[var(--bg-primary)] border border-[#b3d4ec] rounded-md shadow-sm text-[var(--text-primary)]" value={editSoValue} onChange={e => setEditSoValue(e.target.value ? Number(e.target.value) : "")} />
+                              <input type="text" placeholder="Remarks or Reference" className="w-full text-sm p-2 bg-[var(--bg-primary)] border border-[#b3d4ec] rounded-md shadow-sm text-[var(--text-primary)]" value={editSoRemarks} onChange={e => setEditSoRemarks(e.target.value)} />
+                              <div className="flex justify-end gap-2 pt-2">
+                                <button onClick={() => setIsEditingSO(false)} className="text-xs font-medium text-[#2980b9] px-3 py-1.5 hover:bg-[rgba(52,152,219,0.1)] rounded">Cancel</button>
+                                <button onClick={handleUpdateSO} disabled={isSubmitting} className="text-xs font-semibold text-white bg-[#3498db] px-4 py-1.5 rounded shadow-sm hover:bg-[#2980b9] transition">Confirm</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-auto pt-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs text-[var(--text-muted)]">
+                                <span>SO Sanctioned</span>
+                                <span className="font-semibold text-[var(--text-primary)]">{soPercent}% of Effective Budget</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                                <div className="h-full bg-[#3498db] transition-all" style={{ width: `${Math.min(100, Number(soPercent))}%` }} />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs text-[var(--text-muted)]">
+                                <span>IFMS Actual</span>
+                                <span className="font-semibold text-[var(--text-primary)]">{utilisation}% of Effective Budget</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                                <div className="h-full bg-[#2ecc71] transition-all" style={{ width: `${Math.min(100, Number(utilisation))}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Chart */}
+                      <div className="flex flex-col">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">IFMS Spending History</h3>
+                          <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                            <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-[rgba(46,204,113,0.8)]" /> IFMS</span>
+                            <span className="flex items-center gap-1.5"><div className="w-3 h-0 border-t-2 border-dashed border-[#95a5a6]" /> Current SO</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 relative min-h-[160px]">
+                          {activeHistory.length > 0 ? (
+                            <Bar data={chartData} options={chartOptions as any} />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--text-muted)] font-medium">No IFMS history available.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom strip */}
+                  <div className="bg-[var(--bg-surface)] border-t border-[var(--border)] p-4 flex items-center gap-6">
+                    <div className="flex-1 flex items-center gap-4 bg-[var(--bg-primary)] p-2 border border-[var(--border)] rounded-lg">
+                      <div className="w-12 h-12 rounded-full border-4 border-[#2ecc71] flex items-center justify-center font-bold text-sm text-[#2ecc71]">{utilisation}%</div>
+                      <div>
+                        <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Utilisation</div>
+                        <div className="text-xs mt-0.5"><span className="font-semibold text-[var(--text-primary)]">₹{currentIFMS.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> / ₹{activeEffectiveBudgetCr.toLocaleString('en-IN')}</div>
+                      </div>
+                    </div>
+                    <div className="flex-1 flex items-center gap-4 bg-[var(--bg-primary)] p-2 border border-[var(--border)] rounded-lg">
+                      <div className="w-12 h-12 rounded-full border-4 border-[#e74c3c] flex items-center justify-center font-bold text-sm text-[#e74c3c]">{lapseRisk}%</div>
+                      <div>
+                        <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Lapse Risk</div>
+                        <div className="text-xs mt-0.5"><span className="font-semibold text-[var(--text-primary)]">₹{(activeEffectiveBudgetCr - currentIFMS).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> remaining</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CARD 3: Update IFMS */}
+                <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm">
+                  <div className="px-5 py-4 border-b border-[var(--border)]">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">Add IFMS Update</h2>
+                  </div>
+                  <div className="p-5 flex gap-4 items-end">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Updated IFMS Expenditure (₹ Cr)</label>
+                      <input type="number" min="0" step="0.01" className="w-full p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-md text-sm font-semibold shadow-sm focus:border-[var(--text-primary)] focus:outline-none text-[var(--text-primary)]" value={ifmsValue} onChange={e => setIfmsValue(e.target.value ? Number(e.target.value) : "")} />
+                    </div>
+                    <div className="w-48">
+                      <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Data as of Date</label>
+                      <input type="date" className="w-full p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-md text-sm shadow-sm focus:border-[var(--text-primary)] focus:outline-none text-[var(--text-primary)]" value={asOfDate} onChange={e => setAsOfDate(e.target.value)} />
+                    </div>
+                    <div className="flex-[2]">
+                      <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Remarks</label>
+                      <textarea rows={1} className="w-full p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-md text-sm resize-none shadow-sm focus:border-[var(--text-primary)] focus:outline-none text-[var(--text-primary)]" placeholder="Provide context..." value={remarks} onChange={e => setRemarks(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* FOOTER BAR */}
+              <div className="h-16 border-t border-[var(--border)] bg-[var(--bg-surface)] px-8 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10 relative">
+                <div className="text-xs text-[var(--text-muted)]">
+                  Last updated {selected.lastUpdated} by <span className="font-medium text-[var(--text-primary)]">{selected.submitter || "Finance Desk"}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleSaveDraft} disabled={isSubmitting} className="px-5 py-2 rounded-lg text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[rgba(0,0,0,0.02)] transition">Save Draft</button>
+                  <button onClick={handleSaveSubmit} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-sm font-semibold border text-[var(--bg-document)] shadow hover:opacity-90 transition">Save & Submit</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-[var(--text-muted)]">
+              Loading data...
             </div>
-          </div>
-        )}
+          )}
+          {!loading && loadError && !selected && (
+            <div className="absolute inset-0 flex items-center justify-center p-8 text-center bg-[var(--bg-document)]">
+              <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[#f8b4b4] rounded-xl p-6 shadow-sm">
+                <h3 className="text-[#c81e1e] font-semibold mb-2">Initialization Error</h3>
+                <p className="text-sm text-[var(--text-muted)]">{loadError}</p>
+                <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded text-sm font-medium hover:bg-[var(--bg-surface)] transition">Retry</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </AppShell>
   );

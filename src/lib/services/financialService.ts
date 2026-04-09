@@ -92,3 +92,19 @@ export async function saveFinanceSummary(input: {
   });
   await parseResponse<{ ok: boolean }>(response);
 }
+
+export async function createFinanceBudgetSupplement(input: {
+  schemeCode: string;
+  subschemeCode?: string | null;
+  financialYearLabel: string;
+  amountCr: number;
+  reason: string;
+  referenceNo?: string;
+}): Promise<{ id: string }> {
+  const response = await fetch("/api/v1/financial/supplements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseResponse<{ id: string }>(response);
+}

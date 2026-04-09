@@ -116,6 +116,8 @@ model User {
   createdActionItemUpdates ActionItemUpdate[]  @relation("ActionItemUpdateCreatedBy")
   uploadedFiles         File[]                 @relation("FileUploadedBy")
   actionItemProofs      ActionItemProof[]      @relation("ActionItemProofUploadedBy")
+  createdBudgetSupplements FinanceBudgetSupplement[] @relation("FinanceBudgetSupplementCreatedBy")
+
   auditLogs             AuditLog[]
 
   schemeAssignments      SchemeAssignment[]
@@ -213,6 +215,8 @@ model FinancialYear {
   financeExpenditureSnapshots FinanceExpenditureSnapshot[]
   financeSummaryHeads       FinanceSummaryHead[]
   kpiTargets                KpiTarget[]
+  supplements FinanceBudgetSupplement[]
+
 
   @@map("financial_years")
 }
@@ -237,6 +241,8 @@ model Scheme {
   expenditureSnapshots FinanceExpenditureSnapshot[]
   kpiDefinitions      KpiDefinition[]
   actionItems         ActionItem[]
+  supplements FinanceBudgetSupplement[]
+
 
   @@map("schemes")
 }
@@ -258,6 +264,9 @@ model Subscheme {
   expenditureSnapshots FinanceExpenditureSnapshot[]
   kpiDefinitions       KpiDefinition[]
   actionItems          ActionItem[]
+  supplements FinanceBudgetSupplement[]
+
+
 
   @@unique([schemeId, code])
   @@map("subschemes")
@@ -561,4 +570,30 @@ model AuditLog {
 
   @@index([occurredAt])
   @@map("audit_log")
+}
+
+model FinanceBudgetSupplement {
+  id              String   @id @default(uuid()) @db.Uuid
+  schemeId        String   @db.Uuid
+  subschemeId     String?  @db.Uuid
+  financialYearId String   @db.Uuid
+
+  // Signed value — positive = top-up, negative = diversion/cut
+  amountCr        Decimal  @db.Decimal(16, 2)
+
+  // Why this supplement exists — mandatory
+  reason          String
+  // Optional reference (e.g. sanction order number)
+  referenceNo     String?
+
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now())
+
+  scheme        Scheme        @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  subscheme     Subscheme?    @relation(fields: [subschemeId], references: [id], onDelete: Cascade)
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("FinanceBudgetSupplementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([schemeId, financialYearId])
+  @@map("finance_budget_supplements")
 }

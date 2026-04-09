@@ -32,11 +32,11 @@ export default function AppShell({ children, title }: Props) {
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar />
       <div className="flex-1 flex flex-col">
-        <header className="h-48 border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4 flex items-center justify-between gap-6">
+        <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4 flex items-center justify-between gap-6">
           <div>
             <p className="text-[10px] uppercase tracking-[0.5em] text-[var(--text-muted)]">Government of Odisha</p>
             <p className="text-lg font-semibold text-[var(--text-primary)]">Housing & Urban Development Department</p>
-            {title && <p className="text-sm text-[var(--text-muted)]">{title}</p>}
+            {/* {title && <p className="text-sm text-[var(--text-muted)]">{title} xxcc</p>} */}
           </div>
           <div className="flex items-center gap-6 text-sm text-[var(--text-muted)]">
             <button
@@ -46,10 +46,10 @@ export default function AppShell({ children, title }: Props) {
             >
               <Bot size={14} /> Ask NEXUS
             </button>
-            <div className="flex items-center gap-2">
+            {/* <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-[var(--alert-success)]" />
               Live
-            </div>
+            </div> */}
             <span>20 Mar 2026 — 11:42 IST</span>
             <button className="relative text-[var(--text-muted)]">
               <Bell size={18} />
@@ -60,7 +60,7 @@ export default function AppShell({ children, title }: Props) {
                 <User size={16} className="text-[var(--text-muted)]" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Logged in as</p>
+                {/* <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Logged in as</p> */}
                 <p className="text-sm font-semibold text-[var(--text-primary)]">{topLabel}</p>
               </div>
             </div>
