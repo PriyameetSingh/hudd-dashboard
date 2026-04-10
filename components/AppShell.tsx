@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function AppShell({ children, title }: Props) {
-  const { theme } = useTheme();
+  const { theme, mounted } = useTheme();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -63,7 +63,7 @@ export default function AppShell({ children, title }: Props) {
               <span className="w-3 h-3 rounded-full bg-[var(--alert-success)]" />
               Live
             </div> */}
-            <span>{nowLabel}</span>
+            <span>{mounted ? nowLabel : ""}</span>
             <button className="relative text-[var(--text-muted)]">
               <Bell size={18} />
               <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-[var(--alert-critical)]" />

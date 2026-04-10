@@ -130,7 +130,7 @@ const badgeColors: Record<UserRole, string> = {
 export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
-  const { theme } = useTheme();
+  const { theme, mounted } = useTheme();
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -189,7 +189,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">{theme === "dark" ? "Dark" : "Light"} / HUDD Identifier</div>
+      <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">{mounted ? (theme === "dark" ? "Dark" : "Light") : ""} / HUDD Identifier</div>
     </aside>
   );
 }
