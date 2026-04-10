@@ -161,32 +161,55 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1 px-2">
-        {visibleItems.map(item => (
-          <div key={item.href}>
-            <Link
-              href={item.href}
-              className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
-            >
-              <item.icon size={16} />
-              {item.label}
-              {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto opacity-80">{item.badge}</span>}
-            </Link>
-            {item.children && (
-              <div className="ml-6 mt-1 flex flex-col gap-1">
-                {item.children.filter(child => user && child.roles.includes(user.role)).map(child => (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-xs transition ${pathname === child.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : child.emphasis ? "border border-[var(--sidebar-border)] text-[var(--sidebar-text-muted)] hover:text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:text-[var(--sidebar-text-primary)]"}`}
-                  >
-                    <child.icon size={14} />
-                    {child.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+        {visibleItems.map(item => {
+          const childLinks =
+            user && item.children?.length
+              ? item.children.filter(child => child.roles.includes(user.role))
+              : [];
+
+          return (
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
+              >
+                <item.icon size={16} />
+                {item.label}
+                {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto opacity-80">{item.badge}</span>}
+              </Link>
+              {childLinks.length > 0 && (
+                <ul
+                  className="mt-2 ml-3 flex list-none flex-col gap-0.5 border-l-2 border-[var(--sidebar-text-muted)]/30 py-0.5 pl-3"
+                  aria-label={`${item.label} — related links`}
+                >
+                  {childLinks.map(child => {
+                    const active = pathname === child.href;
+                    return (
+                      <li key={child.href}>
+                        <Link
+                          href={child.href}
+                          className={[
+                            "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-snug transition-colors",
+                            active
+                              ? "bg-[var(--sidebar-active-bg)] font-medium text-[var(--sidebar-text-primary)]"
+                              : child.emphasis
+                                ? "bg-[var(--sidebar-hover-bg)]/70 text-[var(--sidebar-text-primary)] hover:bg-[var(--sidebar-hover-bg)]"
+                                : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)]/50 hover:text-[var(--sidebar-text-primary)]",
+                          ].join(" ")}
+                        >
+                          <span className="shrink-0 opacity-90" aria-hidden>
+                            <child.icon size={14} />
+                          </span>
+                          <span className="truncate">{child.label}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">{mounted ? (theme === "dark" ? "Dark" : "Light") : ""} / HUDD Identifier</div>
