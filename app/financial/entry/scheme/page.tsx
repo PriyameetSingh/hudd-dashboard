@@ -420,21 +420,21 @@ export default function SchemeEntryPage() {
   return (
     <AppShell title="Financial Data Entry">
       <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[var(--bg-document)]">
-        {/* SIDEBAR */}
-        <div className="w-72 flex-shrink-0 border-r border-[var(--border)] bg-[var(--bg-surface)] flex flex-col">
+        {/* SCHEME SELECTOR SIDEBAR */}
+        <div className="w-72 flex-shrink-0 border-r border-[var(--border)] bg-[var(--bg-card)] flex flex-col">
           <div className="p-4 border-b border-[var(--border)]">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text-muted)]" />
               <input
                 type="text"
                 placeholder="Search scheme..."
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--text-primary)]"
+                className="w-full pl-9 pr-3 py-2 bg-[var(--bg-document)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
             {groupedSchemes.map(entry => {
               const isActive = selected?.id === entry.id;
               const hasSubs = (entry.subschemes?.length ?? 0) > 0;
@@ -442,23 +442,23 @@ export default function SchemeEntryPage() {
                 <div key={entry.id} className="space-y-1">
                   <button
                     onClick={() => applyEntry(entry)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left rounded-lg transition-colors ${isActive ? 'bg-[var(--bg-card)] border border-[var(--border)] shadow-sm' : 'hover:bg-[rgba(0,0,0,0.02)] border border-transparent'}`}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left rounded-lg transition-colors ${isActive ? 'bg-[var(--bg-content-surface)] border border-[var(--accent)] shadow-sm' : 'hover:bg-[var(--bg-content-surface)] border border-transparent'}`}
                   >
-                    <span className="text-sm font-medium text-[var(--text-primary)] truncate pr-2">{entry.scheme}</span>
+                    <span className={`text-sm font-medium truncate pr-2 ${isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{entry.scheme}</span>
                     <span
                       className="flex-shrink-0 w-2.5 h-2.5 rounded-full"
                       style={{ backgroundColor: STATUS_COLORS[entry.status] || '#95a5a6' }}
                     />
                   </button>
                   {isActive && hasSubs && (
-                    <div className="ml-4 pl-3 border-l-2 border-[var(--border)] space-y-1">
+                    <div className="ml-4 pl-3 border-l-2 border-[var(--accent)] space-y-1">
                       {entry.subschemes?.map(sub => {
                         const isActiveSub = sub.code === selectedSubschemeCode;
                         return (
                           <button
                             key={sub.code}
                             onClick={() => applySubscheme(sub.code, entry)}
-                            className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${isActiveSub ? 'bg-[var(--bg-card)] font-medium text-[var(--text-primary)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-transparent hover:bg-[rgba(0,0,0,0.02)]'}`}
+                            className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${isActiveSub ? 'bg-[var(--bg-content-surface)] font-medium text-[var(--text-primary)] border border-[var(--accent)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-transparent hover:bg-[var(--bg-content-surface)]'}`}
                           >
                             <span className="block font-semibold">{sub.code}</span>
                             <span className="block truncate opacity-80">{sub.name}</span>
@@ -525,12 +525,12 @@ export default function SchemeEntryPage() {
 
                 {/* CARD 1: Annual Budget */}
                 <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface)]">
+                  <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-content-surface)]">
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">Annual Budget</h2>
                     {!isBudgetLocked && (
                       <button
                         onClick={() => setRevisingBudget(true)}
-                        className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-primary)] px-3 py-1 rounded border border-[var(--border)]"
+                        className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-card)] px-3 py-1 rounded border border-[var(--border)]"
                       >
                         Revise Budget
                       </button>
@@ -569,7 +569,7 @@ export default function SchemeEntryPage() {
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)] mt-1 font-medium">{supCountText}</div>
                       </div>
-                      <div className="bg-[var(--bg-surface)] border border-[var(--border)] p-3 rounded-lg flex flex-col justify-center shadow-sm">
+                      <div className="bg-[var(--bg-content-surface)] border border-[var(--border)] p-3 rounded-lg flex flex-col justify-center shadow-sm">
                         <div className="text-[11px] text-[#3498db] font-semibold mb-1 uppercase tracking-wider">Effective</div>
                         <div className="text-2xl font-bold text-[#3498db]">₹ {activeEffectiveBudgetCr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr</div>
                       </div>
@@ -580,7 +580,7 @@ export default function SchemeEntryPage() {
                         <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-3 border-b border-[var(--border)] pb-2">Recent Adjustments</div>
                         <div className="space-y-2.5">
                           {activeSupplements.map(sup => (
-                            <div key={sup.id} className="flex items-start justify-between bg-[var(--bg-surface)] p-2.5 rounded border border-[rgba(0,0,0,0.03)]">
+                            <div key={sup.id} className="flex items-start justify-between bg-[var(--bg-content-surface)] p-2.5 rounded border border-[var(--border)]">
                               <div>
                                 <div className="font-medium text-sm text-[var(--text-primary)]">{sup.reason}</div>
                                 <div className="text-[11px] text-[var(--text-muted)] mt-0.5 flex gap-2">
@@ -641,20 +641,20 @@ export default function SchemeEntryPage() {
 
                 {/* CARD 2: Expenditure Status */}
                 <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden flex flex-col">
-                  <div className="px-5 py-4 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+                  <div className="px-5 py-4 border-b border-[var(--border)] bg-[var(--bg-content-surface)]">
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">Expenditure Status</h2>
                   </div>
                   <div className="p-5 flex-1 flex flex-col">
                     <div className="grid grid-cols-2 gap-8 flex-1">
                       {/* Left: SO */}
-                      <div className="flex flex-col border-r border-[rgba(0,0,0,0.06)] pr-8">
+                      <div className="flex flex-col border-r border-[var(--border)] pr-8">
                         {!isEditingSO ? (
-                          <div className="flex items-center justify-between mb-8 pb-6 border-b border-[rgba(0,0,0,0.04)]">
+                          <div className="flex items-center justify-between mb-8 pb-6 border-b border-[var(--border)]">
                             <div>
                               <div className="text-xs text-[var(--text-muted)] mb-1">SO Sanction Amount</div>
                               <div className="text-3xl font-light text-[var(--text-primary)]">₹ {currentSO.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cr</div>
                             </div>
-                            <button onClick={() => setIsEditingSO(true)} className="px-4 py-1.5 rounded border border-[var(--border)] text-sm font-medium hover:bg-[var(--bg-surface)]">Edit</button>
+                            <button onClick={() => setIsEditingSO(true)} className="px-4 py-1.5 rounded border border-[var(--border)] text-sm font-medium hover:bg-[var(--bg-content-surface)]">Edit</button>
                           </div>
                         ) : (
                           <div className="bg-[rgba(52,152,219,0.05)] border border-[rgba(52,152,219,0.2)] p-4 rounded-lg mb-8">
@@ -677,7 +677,7 @@ export default function SchemeEntryPage() {
                                 <span>SO Sanctioned</span>
                                 <span className="font-semibold text-[var(--text-primary)]">{soPercent}% of Effective Budget</span>
                               </div>
-                              <div className="h-1.5 w-full bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                              <div className="h-1.5 w-full bg-[var(--bg-content-surface)] rounded-full overflow-hidden">
                                 <div className="h-full bg-[#3498db] transition-all" style={{ width: `${Math.min(100, Number(soPercent))}%` }} />
                               </div>
                             </div>
@@ -686,7 +686,7 @@ export default function SchemeEntryPage() {
                                 <span>IFMS Actual</span>
                                 <span className="font-semibold text-[var(--text-primary)]">{utilisation}% of Effective Budget</span>
                               </div>
-                              <div className="h-1.5 w-full bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                              <div className="h-1.5 w-full bg-[var(--bg-content-surface)] rounded-full overflow-hidden">
                                 <div className="h-full bg-[#2ecc71] transition-all" style={{ width: `${Math.min(100, Number(utilisation))}%` }} />
                               </div>
                             </div>
@@ -715,7 +715,7 @@ export default function SchemeEntryPage() {
                   </div>
 
                   {/* Bottom strip */}
-                  <div className="bg-[var(--bg-surface)] border-t border-[var(--border)] p-4 flex items-center gap-6">
+                  <div className="bg-[var(--bg-content-surface)] border-t border-[var(--border)] p-4 flex items-center gap-6">
                     <div className="flex-1 flex items-center gap-4 bg-[var(--bg-primary)] p-2 border border-[var(--border)] rounded-lg">
                       <div className="w-12 h-12 rounded-full border-4 border-[#2ecc71] flex items-center justify-center font-bold text-sm text-[#2ecc71]">{utilisation}%</div>
                       <div>
@@ -756,13 +756,13 @@ export default function SchemeEntryPage() {
               </div>
 
               {/* FOOTER BAR */}
-              <div className="h-16 border-t border-[var(--border)] bg-[var(--bg-surface)] px-8 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10 relative">
+              <div className="h-16 border-t border-[var(--border)] bg-[var(--bg-content-surface)] px-8 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10 relative">
                 <div className="text-xs text-[var(--text-muted)]">
                   Last updated {selected.lastUpdated} by <span className="font-medium text-[var(--text-primary)]">{selected.submitter || "Finance Desk"}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={handleSaveDraft} disabled={isSubmitting} className="px-5 py-2 rounded-lg text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[rgba(0,0,0,0.02)] transition">Save Draft</button>
-                  <button onClick={handleSaveSubmit} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-sm font-semibold border text-[var(--bg-document)] shadow hover:opacity-90 transition">Save & Submit</button>
+                  <button onClick={handleSaveSubmit} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-sm font-semibold border border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] shadow hover:opacity-90 transition">Save & Submit</button>
                 </div>
               </div>
             </>

@@ -124,7 +124,7 @@ export default function ActionItemDetailPage() {
     <AppShell title="Action Item">
       <div className="relative space-y-6 px-6 py-6">
         {isViewer && (
-          <div className="pointer-events-none absolute right-6 top-4 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          <div className="pointer-events-none absolute right-6 top-4 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
             Read-only
           </div>
         )}
@@ -194,7 +194,7 @@ export default function ActionItemDetailPage() {
               <div className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
                 {item.proofFiles.length === 0 && "No files uploaded yet."}
                 {item.proofFiles.map((file) => (
-                  <div key={file.name} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+                  <div key={file.name} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2">
                     <span>{file.name}</span>
                     <a href={file.link} target="_blank" rel="noreferrer" className="text-xs text-[var(--text-primary)] underline">
                       Open
@@ -265,7 +265,7 @@ export default function ActionItemDetailPage() {
                     value={rejectComment}
                     onChange={(event) => setRejectComment(event.target.value)}
                     rows={3}
-                    className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
                     placeholder="Reason required before reject"
                   />
                   <button
@@ -290,7 +290,7 @@ export default function ActionItemDetailPage() {
                 onChange={(event) => setManualUpdateText(event.target.value)}
                 rows={3}
                 disabled={busy}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                 placeholder="Add an update for this action item…"
               />
               <button
@@ -320,7 +320,7 @@ export default function ActionItemDetailPage() {
           <div className="mt-4 space-y-3 text-sm text-[var(--text-muted)]">
             {thread.length === 0 && "No updates yet."}
             {thread.map((entry) => (
-              <div key={entry.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+              <div key={entry.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-3">
                 <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
                   <span>{entry.author}</span>
                   <span>{entry.timestamp}</span>

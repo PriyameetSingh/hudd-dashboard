@@ -96,13 +96,12 @@ function PermissionsModal({ user, onToggle, onClose, alert }: PermissionsModalPr
                 <button
                   key={`modal-${user.code ?? user.email}-${permission}`}
                   onClick={() => onToggle(user.code ?? "", permission)}
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
-                    override?.effect === "deny"
-                      ? "border-[var(--alert-critical)] bg-[rgba(255,59,59,0.12)] text-[var(--alert-critical)]"
-                      : granted
-                        ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
-                        : "border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:border-[var(--text-muted)]"
-                  }`}
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors whitespace-nowrap ${override?.effect === "deny"
+                    ? "border-[var(--alert-critical)] bg-[rgba(255,59,59,0.12)] text-[var(--alert-critical)]"
+                    : granted
+                      ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                      : "border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:border-[var(--text-muted)]"
+                    }`}
                   title={
                     override
                       ? `Override active — click to unset (${override.effect})`
@@ -129,7 +128,7 @@ function PermissionsModal({ user, onToggle, onClose, alert }: PermissionsModalPr
         <div className="border-t border-[var(--border)] px-6 py-4">
           <button
             onClick={onClose}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-card)]"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-card)]"
           >
             Done
           </button>
@@ -299,7 +298,7 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => { setAlert(""); setSelectedUser(user); }}
-                        className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-card)] hover:border-[var(--text-muted)]"
+                        className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-card)] hover:border-[var(--text-muted)]"
                         title="Manage permissions for this user"
                       >
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -243,28 +243,28 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
         )}
 
         <div className="space-y-3">
-          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">
             Code
             <input
               value={form.code}
               onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
             />
           </label>
-          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">
             Name
             <input
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
             />
           </label>
-          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">
             Vertical
             <select
               value={form.verticalId}
               onChange={(event) => setForm((prev) => ({ ...prev, verticalId: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
             >
               {reference.verticals.map((vertical) => (
                 <option key={vertical.id} value={vertical.id}>
@@ -273,12 +273,12 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
               ))}
             </select>
           </label>
-          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          <label className="block text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">
             Sponsorship Type
             <select
               value={form.sponsorshipType}
               onChange={(event) => setForm((prev) => ({ ...prev, sponsorshipType: event.target.value as SponsorshipType }))}
-              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
             >
               <option value="STATE">STATE</option>
               <option value="CENTRAL">CENTRAL</option>
@@ -286,8 +286,8 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
           </label>
 
           {!selectedId && (
-            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Optional subschemes (on create)</p>
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">Optional subschemes (on create)</p>
               <div className="grid gap-2 md:grid-cols-2">
                 <input
                   placeholder="Subscheme code"
@@ -353,8 +353,8 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
             </div>
           )}
 
-          <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Dashboard owner assignments</p>
+          <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-primary)]">Dashboard owner assignments</p>
             <p className="text-xs text-[var(--text-muted)]">Each row is a dashboard owner. Assign either a user or a role.</p>
             <button
               type="button"
@@ -424,7 +424,7 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
                         ),
                       )
                     }
-                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
                   >
                     <option value="">Select user</option>
                     {reference.users.map((user) => (
@@ -443,7 +443,7 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
                         ),
                       )
                     }
-                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                    className="min-w-[12rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
                   >
                     <option value="">Select role</option>
                     {reference.roles.map((role) => (

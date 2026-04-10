@@ -154,11 +154,10 @@ export default function ActionItemsPage() {
             <button
               key={entry.id}
               onClick={() => setFilter(entry.id)}
-              className={`rounded-full border px-4 py-1 text-[11px] uppercase tracking-[0.3em] transition ${
-                filter === entry.id
-                  ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
-                  : "border-[var(--border)] text-[var(--text-muted)]"
-              }`}
+              className={`rounded-full border px-4 py-1 text-[11px] uppercase tracking-[0.3em] transition ${filter === entry.id
+                ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                : "border-[var(--border)] text-[var(--text-muted)]"
+                }`}
             >
               {entry.label}
             </button>
@@ -170,12 +169,12 @@ export default function ActionItemsPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by scheme or title"
-            className="min-w-[220px] flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            className="min-w-[220px] flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
           />
           <select
             value={verticalFilter}
             onChange={(event) => setVerticalFilter(event.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm"
           >
             {verticalOptions.map((option) => (
               <option key={option} value={option}>
@@ -186,7 +185,7 @@ export default function ActionItemsPage() {
           <select
             value={assigneeFilter}
             onChange={(event) => setAssigneeFilter(event.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm"
           >
             {assigneeOptions.map((option) => (
               <option key={option} value={option}>
@@ -197,7 +196,7 @@ export default function ActionItemsPage() {
           <select
             value={priorityFilter}
             onChange={(event) => setPriorityFilter(event.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm"
           >
             {priorityOptions.map((option) => (
               <option key={option} value={option}>
@@ -208,7 +207,7 @@ export default function ActionItemsPage() {
           <select
             value={dueFilter}
             onChange={(event) => setDueFilter(event.target.value)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
+            className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm"
           >
             <option value="all">Due Date</option>
             <option value="week">Due this week</option>

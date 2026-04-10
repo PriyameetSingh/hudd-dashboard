@@ -148,11 +148,10 @@ export default function KPIsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full border px-4 py-1 text-[11px] uppercase tracking-[0.3em] transition ${
-                activeTab === tab.id
-                  ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
-                  : "border-[var(--border)] text-[var(--text-muted)]"
-              }`}
+              className={`rounded-full border px-4 py-1 text-[11px] uppercase tracking-[0.3em] transition ${activeTab === tab.id
+                ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                : "border-[var(--border)] text-[var(--text-primary)]"
+                }`}
             >
               {tab.label}
             </button>
@@ -176,7 +175,7 @@ export default function KPIsPage() {
                 <div className="text-sm text-[var(--text-muted)]">No KPI submissions awaiting your review.</div>
               )}
               {pendingQueue.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 cursor-pointer hover:bg-[var(--bg-card)] transition" onClick={() => setViewKpi(item)}>
+                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 cursor-pointer hover:bg-[var(--bg-card)] transition" onClick={() => setViewKpi(item)}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">{item.scheme}</p>
@@ -275,7 +274,7 @@ export default function KPIsPage() {
                   {filtered.map((item) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b border-[var(--border)] text-[var(--text-primary)] transition hover:bg-[var(--bg-surface)]"
+                      className="cursor-pointer border-b border-[var(--border)] text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)]"
                       onClick={() => setViewKpi(item)}
                     >
                       <td className="py-3 pr-4 font-medium">{item.scheme}</td>

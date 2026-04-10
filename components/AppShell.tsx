@@ -47,8 +47,8 @@ export default function AppShell({ children, title }: Props) {
       <div className="flex-1 flex flex-col">
         <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4 flex items-center justify-between gap-6">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.5em] text-[var(--text-muted)]">Government of Odisha</p>
-            <p className="text-lg font-semibold text-[var(--text-secondary)]">Housing & Urban Development Department</p>
+            {/* <p className="text-[10px] uppercase tracking-[0.5em] text-[var(--text-muted)]">Government of Odisha</p> */}
+            <p className="text-lg font-medium text-[var(--text-secondary)]">Housing & Urban Development Department</p>
             {/* {title && <p className="text-sm text-[var(--text-muted)]">{title} xxcc</p>} */}
           </div>
           <div className="flex items-center gap-6 text-sm text-[var(--text-muted)]">

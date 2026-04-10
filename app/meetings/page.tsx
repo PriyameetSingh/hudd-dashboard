@@ -231,11 +231,10 @@ function MeetingCard({
 }) {
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:shadow-lg ${
-        isToday
-          ? "border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/5 to-[var(--bg-card)] shadow-md shadow-[var(--accent)]/5"
-          : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-hover,var(--border))]"
-      }`}
+      className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:shadow-lg ${isToday
+        ? "border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/5 to-[var(--bg-card)] shadow-md shadow-[var(--accent)]/5"
+        : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-hover,var(--border))]"
+        }`}
     >
       {/* subtle glow for today */}
       {isToday && (
@@ -273,7 +272,7 @@ function MeetingCard({
 
         {/* FY badge */}
         <div className="mt-3">
-          <span className="inline-block rounded-md bg-[var(--bg-surface,var(--bg-primary))] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+          <span className="inline-block rounded-md bg-[var(--bg-card,var(--bg-primary))] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
             FY {getFinancialYear(meeting.meetingDate)}
           </span>
         </div>
@@ -380,7 +379,7 @@ function ScheduleMeetingModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="relative w-full max-w-lg animate-[modalIn_0.3s_ease] rounded-3xl border border-[var(--border)] bg-[var(--bg-surface)] p-8 shadow-2xl"
+        className="relative w-full max-w-lg animate-[modalIn_0.3s_ease] rounded-3xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl"
         style={{
           // @ts-expect-error custom keyframe
           "--tw-animate": "modalIn",
@@ -494,7 +493,7 @@ function ScheduleMeetingModal({
             type="button"
             disabled={submitting}
             onClick={handleSubmit}
-            className="w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[var(--accent)]/20 transition-all hover:brightness-110 hover:shadow-xl hover:shadow-[var(--accent)]/30 active:scale-[0.98] disabled:opacity-60"
+            className="w-full rounded-xl bg-[var(--bg-surface)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[var(--accent)]/20 transition-all hover:brightness-110 hover:shadow-xl hover:shadow-[var(--accent)]/30 active:scale-[0.98] disabled:opacity-60"
           >
             {submitting ? "Scheduling…" : "Schedule Meeting"}
           </button>
@@ -551,7 +550,7 @@ function ActiveMeetingOverlay({
       </div>
 
       {/* header bar */}
-      <div className="relative z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-surface)]/80 px-8 py-4 backdrop-blur-xl">
+      <div className="relative z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-card)]/95 px-8 py-4 backdrop-blur-xl">
         <div>
           <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--accent)]">
             Meeting In Progress
@@ -587,7 +586,7 @@ function ActiveMeetingOverlay({
       {/* body */}
       <div className="relative z-10 flex flex-1 overflow-hidden">
         {/* ------- sidebar: topic list ------- */}
-        <aside className="w-80 shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-surface)]/60 p-6 backdrop-blur-lg">
+        <aside className="w-80 shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)]/95 p-6 backdrop-blur-lg">
           <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
             Agenda
           </p>
@@ -604,13 +603,12 @@ function ActiveMeetingOverlay({
                   <button
                     type="button"
                     onClick={() => setCurrentIdx(idx)}
-                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left text-sm transition-all ${
-                      isCurrent
-                        ? "border border-[var(--accent)]/30 bg-[var(--accent)]/10 font-semibold text-[var(--accent)] shadow-sm shadow-[var(--accent)]/10"
-                        : isDone
-                          ? "text-[var(--text-muted)] line-through opacity-60"
-                          : "text-[var(--text-primary)] hover:bg-[var(--bg-card)]"
-                    }`}
+                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left text-sm transition-all ${isCurrent
+                      ? "border border-[var(--accent)]/30 bg-[var(--accent)]/10 font-semibold text-[var(--accent)] shadow-sm shadow-[var(--accent)]/10"
+                      : isDone
+                        ? "text-[var(--text-muted)] line-through opacity-60"
+                        : "text-[var(--text-primary)] hover:bg-[var(--bg-card)]"
+                      }`}
                   >
                     <span className="mt-0.5 shrink-0">
                       {isDone ? (
@@ -707,13 +705,12 @@ function ActiveMeetingOverlay({
                     key={idx}
                     type="button"
                     onClick={() => setCurrentIdx(idx)}
-                    className={`h-2 rounded-full transition-all ${
-                      idx === currentIdx
-                        ? "w-6 bg-[var(--accent)]"
-                        : idx < currentIdx
-                          ? "w-2 bg-[var(--accent)]/40"
-                          : "w-2 bg-[var(--border)]"
-                    }`}
+                    className={`h-2 rounded-full transition-all ${idx === currentIdx
+                      ? "w-6 bg-[var(--accent)]"
+                      : idx < currentIdx
+                        ? "w-2 bg-[var(--accent)]/40"
+                        : "w-2 bg-[var(--border)]"
+                      }`}
                   />
                 ))}
               </div>

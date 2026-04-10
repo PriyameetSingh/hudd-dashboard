@@ -31,7 +31,7 @@ export default function ProofUpload({
   };
 
   return (
-    <div className={clsx("rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-4", className)}>
+    <div className={clsx("rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-card)] p-4", className)}>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-card)]">
           <UploadCloud size={18} className="text-[var(--text-muted)]" />

@@ -210,11 +210,10 @@ export default function KPIEntryPage() {
                       <li key={item.id}>
                         <button
                           onClick={() => setSelectedId(item.id)}
-                          className={`flex w-full items-start gap-2 px-4 py-2 text-left transition ${
-                            selectedId === item.id
-                              ? "bg-[var(--bg-surface)] border-l-2 border-[var(--text-primary)]"
-                              : "hover:bg-[var(--bg-surface)] border-l-2 border-transparent"
-                          }`}
+                          className={`flex w-full items-start gap-2 px-4 py-2 text-left transition ${selectedId === item.id
+                            ? "bg-[var(--bg-content-surface)] border border-[var(--accent)] shadow-sm"
+                            : "hover:bg-[var(--bg-content-surface)] hover:border-l-2 hover:border-[var(--border)]"
+                            }`}
                         >
                           <span
                             className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(item.status)}`}
@@ -317,21 +316,19 @@ export default function KPIEntryPage() {
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Response</p>
                       <div className="flex gap-3">
                         <button
-                          className={`rounded-xl border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition ${
-                            binaryValue === true
-                              ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
-                              : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-primary)]"
-                          }`}
+                          className={`rounded-xl border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition ${binaryValue === true
+                            ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                            : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-primary)]"
+                            }`}
                           onClick={() => setBinaryResponses((prev) => ({ ...prev, [item.id]: true }))}
                         >
                           Yes
                         </button>
                         <button
-                          className={`rounded-xl border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition ${
-                            binaryValue === false
-                              ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
-                              : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-primary)]"
-                          }`}
+                          className={`rounded-xl border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition ${binaryValue === false
+                            ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                            : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-primary)]"
+                            }`}
                           onClick={() => setBinaryResponses((prev) => ({ ...prev, [item.id]: false }))}
                         >
                           No
@@ -357,11 +354,10 @@ export default function KPIEntryPage() {
                               setRowState((prev) => ({ ...prev, [item.id]: {} }));
                             }
                           }}
-                          className={`w-full rounded-xl border px-4 py-2.5 text-sm text-[var(--text-primary)] bg-[var(--bg-surface)] focus:outline-none focus:ring-1 ${
-                            validationError
-                              ? "border-[var(--alert-critical)] focus:ring-[var(--alert-critical)]"
-                              : "border-[var(--border)] focus:ring-[var(--text-primary)]"
-                          }`}
+                          className={`w-full rounded-xl border px-4 py-2.5 text-sm text-[var(--text-primary)] bg-[var(--bg-card)] focus:outline-none focus:ring-1 ${validationError
+                            ? "border-[var(--alert-critical)] focus:ring-[var(--alert-critical)]"
+                            : "border-[var(--border)] focus:ring-[var(--text-primary)]"
+                            }`}
                         />
                         {validationError && (
                           <p className="text-[11px] text-[var(--alert-critical)]">{validationError}</p>
@@ -381,15 +377,15 @@ export default function KPIEntryPage() {
                           value={denVal ?? ""}
                           readOnly
                           disabled
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed"
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed"
                         />
                       </div>
                       <div className="space-y-2">
-                      <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                        Percentage{" "}
-                      </label>
-                      <input type="number" value={computed != null ? `${computed}%` : "—"} readOnly disabled className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed" />
-                    </div>
+                        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                          Percentage{" "}
+                        </label>
+                        <input type="number" value={computed != null ? `${computed}%` : "—"} readOnly disabled className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed" />
+                      </div>
                     </div>
                   )}
 
@@ -419,7 +415,7 @@ export default function KPIEntryPage() {
                         setRemarksById((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
                       placeholder="Add any notes or context…"
-                      className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--text-primary)]"
+                      className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--text-primary)]"
                     />
                   </div>
 
