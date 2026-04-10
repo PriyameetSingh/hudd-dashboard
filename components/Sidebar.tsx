@@ -148,13 +148,13 @@ export default function Sidebar() {
   const visibleItems = user ? items.filter(item => item.roles.includes(user.role)) : [];
 
   return (
-    <aside className="w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--border)] flex flex-col sticky top-0">
-      <div className="px-6 py-5 border-b border-[var(--border)]">
-        <div className="text-sm font-semibold tracking-[0.6em] text-[var(--text-muted)]">HUDD NEXUS</div>
-        <div className="text-xs uppercase text-[var(--text-muted)] mt-1">Government of Odisha</div>
+    <aside className="w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--sidebar-border)] flex flex-col sticky top-0">
+      <div className="px-6 py-5 border-b border-[var(--sidebar-border)]">
+        <div className="text-sm font-semibold tracking-[0.6em] text-[var(--sidebar-text-muted)]">HUDD NEXUS</div>
+        <div className="text-xs uppercase text-[var(--sidebar-text-muted)] mt-1">Government of Odisha</div>
         {user && (
           <div className="mt-3 flex flex-col gap-1">
-            <div className="text-[13px] font-bold text-[var(--text-primary)]">{user.name}</div>
+            <div className="text-[13px] font-bold text-[var(--sidebar-text-primary)]">{user.name}</div>
             <div className="flex items-center gap-1">{roleBadge}</div>
           </div>
         )}
@@ -165,11 +165,11 @@ export default function Sidebar() {
           <div key={item.href}>
             <Link
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--border)] text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
+              className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
             >
               <item.icon size={16} />
               {item.label}
-              {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--border)] px-2 py-0.5 rounded-full ml-auto">{item.badge}</span>}
+              {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto opacity-80">{item.badge}</span>}
             </Link>
             {item.children && (
               <div className="ml-6 mt-1 flex flex-col gap-1">
@@ -177,7 +177,7 @@ export default function Sidebar() {
                   <Link
                     key={child.href}
                     href={child.href}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-xs transition ${pathname === child.href ? "bg-[var(--border)] text-[var(--text-primary)]" : child.emphasis ? "border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
+                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-xs transition ${pathname === child.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : child.emphasis ? "border border-[var(--sidebar-border)] text-[var(--sidebar-text-muted)] hover:text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:text-[var(--sidebar-text-primary)]"}`}
                   >
                     <child.icon size={14} />
                     {child.label}
@@ -189,7 +189,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-[var(--border)] text-[11px] text-[var(--text-muted)]">{theme === "dark" ? "Dark" : "Light"} / HUDD Identifier</div>
+      <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">{theme === "dark" ? "Dark" : "Light"} / HUDD Identifier</div>
     </aside>
   );
 }

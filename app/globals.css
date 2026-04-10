@@ -1,28 +1,42 @@
 @import "tailwindcss";
 
+/* Light mode (default) */
 :root {
-  --bg-primary: #ffffff;
-  --bg-surface: #f5f5f5;
+  --bg-primary: #f0f4f8;
+  --bg-surface: #0b1e35;
+  --bg-surface-text: #ffffff;
   --bg-card: #ffffff;
-  --border: #e0e0e0;
-  --border-strong: #b0b0b0;
-  --text-primary: #000000;
-  --text-secondary: #444444;
-  --text-muted: #888888;
+  --border: #d1dae6;
+  --border-strong: #9aafc5;
+  --sidebar-border: #1a3050;
+  --text-primary: #0d1b2a;
+  --text-secondary: #3a4f65;
+  --text-muted: #6b7f94;
+  --sidebar-text-primary: #ffffff;
+  --sidebar-text-muted: #7fa8cc;
+  --sidebar-active-bg: #1a3a5c;
+  --sidebar-hover-bg: #152d47;
   --alert-critical: #cc0000;
   --alert-warning: #b87700;
   --alert-success: #007700;
 }
 
+/* Dark mode */
 .dark {
   --bg-primary: #000000;
   --bg-surface: #111111;
+  --bg-surface-text: #ffffff;
   --bg-card: #111111;
   --border: #2a2a2a;
   --border-strong: #444444;
+  --sidebar-border: #2a2a2a;
   --text-primary: #ffffff;
   --text-secondary: #cccccc;
   --text-muted: #888888;
+  --sidebar-text-primary: #ffffff;
+  --sidebar-text-muted: #888888;
+  --sidebar-active-bg: #2a2a2a;
+  --sidebar-hover-bg: #1e1e1e;
   --alert-critical: #ff3b3b;
   --alert-warning: #ffb800;
   --alert-success: #00c853;

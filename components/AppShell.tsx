@@ -28,6 +28,19 @@ export default function AppShell({ children, title }: Props) {
 
   const isViewer = user?.role === UserRole.VIEWER;
 
+  const nowLabel = useMemo(() => {
+    const now = new Date();
+    return now.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+      timeZoneName: "short",
+    });
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <Sidebar />
@@ -35,7 +48,7 @@ export default function AppShell({ children, title }: Props) {
         <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-6 py-4 flex items-center justify-between gap-6">
           <div>
             <p className="text-[10px] uppercase tracking-[0.5em] text-[var(--text-muted)]">Government of Odisha</p>
-            <p className="text-lg font-semibold text-[var(--text-primary)]">Housing & Urban Development Department</p>
+            <p className="text-lg font-semibold text-[var(--text-secondary)]">Housing & Urban Development Department</p>
             {/* {title && <p className="text-sm text-[var(--text-muted)]">{title} xxcc</p>} */}
           </div>
           <div className="flex items-center gap-6 text-sm text-[var(--text-muted)]">
@@ -50,7 +63,7 @@ export default function AppShell({ children, title }: Props) {
               <span className="w-3 h-3 rounded-full bg-[var(--alert-success)]" />
               Live
             </div> */}
-            <span>20 Mar 2026 — 11:42 IST</span>
+            <span>{nowLabel}</span>
             <button className="relative text-[var(--text-muted)]">
               <Bell size={18} />
               <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-[var(--alert-critical)]" />
@@ -58,10 +71,6 @@ export default function AppShell({ children, title }: Props) {
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center">
                 <User size={16} className="text-[var(--text-muted)]" />
-              </div>
-              <div>
-                {/* <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Logged in as</p> */}
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{topLabel}</p>
               </div>
             </div>
           </div>
