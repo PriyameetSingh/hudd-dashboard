@@ -11,6 +11,8 @@ type Body = {
   note?: string;
   reviewerDecision?: "approve" | "reject";
   rejectionReason?: string;
+  assignedToUserCode?: string;
+  reviewerUserCode?: string;
 };
 
 function toIsoDate(value: Date): string {
@@ -25,8 +27,8 @@ function mapActionItem(item: {
   priority: string;
   dueDate: Date;
   status: ActionItemStatus;
-  assignedTo: { name: string; id: string } | null;
-  reviewer: { name: string; id: string } | null;
+  assignedTo: { name: string; id: string; code: string | null } | null;
+  reviewer: { name: string; id: string; code: string | null } | null;
   scheme: { code: string } | null;
   updates: Array<{
     id: string;
@@ -53,6 +55,8 @@ function mapActionItem(item: {
     reviewer: item.reviewer?.name ?? "",
     assignedToUserId: item.assignedTo?.id,
     reviewerUserId: item.reviewer?.id,
+    assignedToUserCode: item.assignedTo?.code ?? null,
+    reviewerUserCode: item.reviewer?.code ?? null,
     schemeId: item.scheme?.code ?? "",
     daysOverdue: overdueDays,
     updates: item.updates.map((update) => ({
@@ -75,8 +79,8 @@ async function getActionItemById(id: string) {
     include: {
       scheme: { select: { code: true } },
       vertical: { select: { name: true } },
-      assignedTo: { select: { name: true, id: true } },
-      reviewer: { select: { name: true, id: true } },
+      assignedTo: { select: { name: true, id: true, code: true } },
+      reviewer: { select: { name: true, id: true, code: true } },
       updates: {
         orderBy: { timestamp: "asc" },
         include: {
@@ -167,6 +171,58 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
         id,
         { status: beforeStatus },
         { status: nextStatus, decision: body.reviewerDecision },
+        { ...auditContext, meetingId: current.meetingId, schemeId: current.schemeId },
+      );
+      const item = await getActionItemById(id);
+      return NextResponse.json({ item: item ? mapActionItem(item) : null });
+    }
+
+    if (body.assignedToUserCode !== undefined || body.reviewerUserCode !== undefined) {
+      const canReassign = await hasPermission("UPDATE_ACTION_ITEMS");
+      if (!canReassign) {
+        return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
+      }
+      const assignCode = body.assignedToUserCode?.trim();
+      const reviewCode = body.reviewerUserCode?.trim();
+      if (!assignCode || !reviewCode) {
+        return NextResponse.json(
+          { detail: "assignedToUserCode and reviewerUserCode are required" },
+          { status: 400 },
+        );
+      }
+      if (assignCode === reviewCode) {
+        return NextResponse.json(
+          { detail: "Assignee and reviewer must be different users" },
+          { status: 400 },
+        );
+      }
+      const assigneeUser = await prisma.user.findFirst({ where: { code: assignCode } });
+      const reviewerUser = await prisma.user.findFirst({ where: { code: reviewCode } });
+      if (!assigneeUser || !reviewerUser) {
+        return NextResponse.json({ detail: "Assignee or reviewer user not found" }, { status: 400 });
+      }
+      const prevAssignName = current.assignedTo?.name ?? "—";
+      const prevReviewName = current.reviewer?.name ?? "—";
+      await prisma.actionItem.update({
+        where: { id },
+        data: { assignedToId: assigneeUser.id, reviewerId: reviewerUser.id },
+      });
+      await prisma.actionItemUpdate.create({
+        data: {
+          actionItemId: id,
+          timestamp: new Date(),
+          status: current.status,
+          note: `Reassigned: assignee ${prevAssignName} → ${assigneeUser.name}; reviewer ${prevReviewName} → ${reviewerUser.name}`,
+          createdById: actor.id,
+        },
+      });
+      await logAudit(
+        actor.id,
+        "action_item.update",
+        "action_item",
+        id,
+        { assignedToId: current.assignedToId, reviewerId: current.reviewerId },
+        { assignedToId: assigneeUser.id, reviewerId: reviewerUser.id },
         { ...auditContext, meetingId: current.meetingId, schemeId: current.schemeId },
       );
       const item = await getActionItemById(id);

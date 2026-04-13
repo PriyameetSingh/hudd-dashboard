@@ -118,6 +118,7 @@ export async function GET() {
         denominator: toNumber(target?.denominatorValue),
         yes: measurement?.yesValue ?? null,
         status: mapWorkflowStatus(measurement?.workflowStatus),
+        measurementProgressStatus: measurement?.progressStatus ?? null,
         lastUpdated: (measurement?.measuredAt ?? definition.updatedAt).toISOString().slice(0, 10),
         remarks: measurement?.remarks ?? undefined,
         assignedToUserId: definition.assignedTo?.id ?? null,

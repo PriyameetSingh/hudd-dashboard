@@ -36,6 +36,8 @@ export async function updateActionItem(
     note?: string;
     reviewerDecision?: "approve" | "reject";
     rejectionReason?: string;
+    assignedToUserCode?: string;
+    reviewerUserCode?: string;
   },
 ): Promise<ActionItem> {
   const response = await fetch(`/api/v1/action-items/${id}`, {

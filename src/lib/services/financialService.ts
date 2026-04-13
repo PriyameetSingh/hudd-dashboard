@@ -93,6 +93,20 @@ export async function saveFinanceSummary(input: {
   await parseResponse<{ ok: boolean }>(response);
 }
 
+/** Response body from POST /api/v1/financial/supplements */
+export type FinanceBudgetSupplementCreated = {
+  id: string;
+  schemeId: string;
+  subschemeId: string | null;
+  financialYearId: string;
+  /** API may return a decimal string */
+  amountCr: string | number;
+  reason: string;
+  referenceNo: string;
+  createdById: string;
+  createdAt: string;
+};
+
 export async function createFinanceBudgetSupplement(input: {
   schemeCode: string;
   subschemeCode?: string | null;
@@ -100,11 +114,11 @@ export async function createFinanceBudgetSupplement(input: {
   amountCr: number;
   reason: string;
   referenceNo?: string;
-}): Promise<{ id: string }> {
+}): Promise<FinanceBudgetSupplementCreated> {
   const response = await fetch("/api/v1/financial/supplements", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  return parseResponse<{ id: string }>(response);
+  return parseResponse<FinanceBudgetSupplementCreated>(response);
 }

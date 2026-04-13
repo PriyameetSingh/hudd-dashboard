@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { Lock, Plus, Search } from "lucide-react";
+import { Loader2, Lock, Plus, Search } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
-import { UserRole } from "@/lib/auth";
+import { getCurrentUser, UserRole } from "@/lib/auth";
 import {
   fetchFinancialBudgets,
   submitFinancialSnapshot,
@@ -60,6 +60,47 @@ const horizontalLinePlugin = {
 };
 ChartJS.register(horizontalLinePlugin);
 
+type SupplementRow = FinancialEntry["supplements"][number];
+
+function appendSupplementToEntry(
+  entry: FinancialEntry,
+  opts: {
+    hasSubschemes: boolean;
+    subschemeCode: string | null;
+    row: SupplementRow;
+    amountCr: number;
+  },
+): FinancialEntry {
+  const { hasSubschemes, subschemeCode, row, amountCr } = opts;
+  if (hasSubschemes && subschemeCode && (entry.subschemes?.length ?? 0) > 0) {
+    return {
+      ...entry,
+      subschemes: entry.subschemes!.map((sub) => {
+        if (sub.code !== subschemeCode) return sub;
+        const prevTotal = sub.totalSupplementCr ?? 0;
+        const annual = sub.annualBudget ?? 0;
+        const newTotal = prevTotal + amountCr;
+        return {
+          ...sub,
+          totalSupplementCr: newTotal,
+          effectiveBudgetCr: annual + newTotal,
+          supplements: [row, ...(sub.supplements ?? [])],
+        };
+      }),
+    };
+  }
+  const prevTotal = entry.totalSupplementCr ?? 0;
+  const newTotal = prevTotal + amountCr;
+  return {
+    ...entry,
+    totalSupplementCr: newTotal,
+    effectiveBudgetCr: entry.annualBudget + newTotal,
+    supplements: [row, ...entry.supplements],
+  };
+}
+
+type SubmitIntent = "draft" | "submitted" | "supplement" | "revise" | "so";
+
 const STATUS_COLORS: Record<string, string> = {
   submitted_this_week: "#2ecc71",
   submitted_pending: "#2ecc71",
@@ -79,6 +120,7 @@ export default function SchemeEntryPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<SubmitIntent | null>(null);
 
   // Subscheme selection
   const [selectedSubschemeCode, setSelectedSubschemeCode] = useState<string>("");
@@ -160,6 +202,24 @@ export default function SchemeEntryPage() {
     setIsEditingSO(false);
     setAsOfDate(new Date().toISOString().slice(0, 10));
   }, []);
+
+  /** Re-bind `selected` from a fresh fetch; `entries` alone does not update the detail panel. */
+  const applyFreshEntries = useCallback(
+    (
+      data: { entries: FinancialEntry[]; financialYearLabel: string | null },
+      schemeId: string,
+      subschemeCode: string | null,
+    ) => {
+      const next = data.entries.find((e) => e.id === schemeId) ?? data.entries[0] ?? null;
+      if (!next) return;
+      applyEntry(next);
+      if (subschemeCode && (next.subschemes?.length ?? 0) > 0) {
+        const sub = next.subschemes?.find((s) => s.code === subschemeCode);
+        if (sub) applySubscheme(subschemeCode, next);
+      }
+    },
+    [applyEntry, applySubscheme],
+  );
 
   useEffect(() => {
     let active = true;
@@ -248,6 +308,7 @@ export default function SchemeEntryPage() {
     }
 
     setIsSubmitting(true);
+    setPendingSubmit(workflowStatus);
     setAlertInfo(null);
     try {
       await submitFinancialSnapshot({
@@ -267,22 +328,14 @@ export default function SchemeEntryPage() {
         triggerAlert("success", "Update saved securely.");
         const data = await loadEntries();
         if (data) {
-          const next = data.entries.find((e) => e.id === selected.id) ?? data.entries[0] ?? null;
-          if (next) {
-            applyEntry(next);
-            if (hasSubschemes && selectedSubschemeCode) {
-              const sub = next.subschemes?.find(s => s.code === selectedSubschemeCode);
-              if (sub) {
-                applySubscheme(selectedSubschemeCode, next);
-              }
-            }
-          }
+          applyFreshEntries(data, selected.id, hasSubschemes ? selectedSubschemeCode : null);
         }
       }
     } catch (e: unknown) {
       triggerAlert("error", e instanceof Error ? e.message : "Save failed");
     } finally {
       setIsSubmitting(false);
+      setPendingSubmit(null);
     }
   };
 
@@ -297,8 +350,9 @@ export default function SchemeEntryPage() {
       return;
     }
     setIsSubmitting(true);
+    setPendingSubmit("supplement");
     try {
-      await createFinanceBudgetSupplement({
+      const created = await createFinanceBudgetSupplement({
         schemeCode: selected.id,
         subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
         financialYearLabel,
@@ -306,16 +360,53 @@ export default function SchemeEntryPage() {
         reason: supplementReason,
         referenceNo: supplementRefNo,
       });
+      const amountCr = Number(created.amountCr);
+      const actor = getCurrentUser()?.name ?? "You";
+      const row: SupplementRow = {
+        id: created.id,
+        amountCr,
+        reason: created.reason,
+        referenceNo: created.referenceNo?.trim() || undefined,
+        createdAt: created.createdAt,
+        createdByName: actor,
+      };
+      const schemeId = selected.id;
+      const subCode = hasSubschemes ? selectedSubschemeCode : null;
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.id === schemeId
+            ? appendSupplementToEntry(e, {
+                hasSubschemes,
+                subschemeCode: subCode,
+                row,
+                amountCr,
+              })
+            : e,
+        ),
+      );
+      setSelected((prev) =>
+        prev && prev.id === schemeId
+          ? appendSupplementToEntry(prev, {
+              hasSubschemes,
+              subschemeCode: subCode,
+              row,
+              amountCr,
+            })
+          : prev,
+      );
       setAddingSupplement(false);
       setSupplementAmount("");
       setSupplementReason("");
       setSupplementRefNo("");
-      await loadEntries();
       triggerAlert("success", "Supplement added successfully.");
+      void loadEntries().then((data) => {
+        if (data) applyFreshEntries(data, schemeId, subCode);
+      });
     } catch (e: unknown) {
       triggerAlert("error", e instanceof Error ? e.message : "Failed to add supplement.");
     } finally {
       setIsSubmitting(false);
+      setPendingSubmit(null);
     }
   };
 
@@ -330,6 +421,7 @@ export default function SchemeEntryPage() {
       return;
     }
     setIsSubmitting(true);
+    setPendingSubmit("revise");
     try {
       await patchFinancialBudget({
         schemeCode: selected.id,
@@ -341,12 +433,16 @@ export default function SchemeEntryPage() {
       setRevisingBudget(false);
       setReviseBudgetAmount("");
       setReviseBudgetReason("");
-      await loadEntries();
+      const schemeId = selected.id;
+      const subCode = hasSubschemes ? selectedSubschemeCode : null;
+      const data = await loadEntries();
+      if (data) applyFreshEntries(data, schemeId, subCode);
       triggerAlert("success", "Budget revised successfully.");
     } catch (e: unknown) {
       triggerAlert("error", e instanceof Error ? e.message : "Failed to revise budget.");
     } finally {
       setIsSubmitting(false);
+      setPendingSubmit(null);
     }
   };
 
@@ -357,6 +453,7 @@ export default function SchemeEntryPage() {
       return;
     }
     setIsSubmitting(true);
+    setPendingSubmit("so");
     try {
       // Per instructions SO update logic; substituting submitFinancialSnapshot for SO update
       await submitFinancialSnapshot({
@@ -372,12 +469,16 @@ export default function SchemeEntryPage() {
       setIsEditingSO(false);
       setEditSoValue("");
       setEditSoRemarks("");
-      await loadEntries();
+      const schemeId = selected.id;
+      const subCode = hasSubschemes ? selectedSubschemeCode : null;
+      const data = await loadEntries();
+      if (data) applyFreshEntries(data, schemeId, subCode);
       triggerAlert("success", "SO updated successfully.");
     } catch (e: unknown) {
       triggerAlert("error", e instanceof Error ? e.message : "Failed to update SO.");
     } finally {
       setIsSubmitting(false);
+      setPendingSubmit(null);
     }
   };
 
@@ -552,7 +653,21 @@ export default function SchemeEntryPage() {
                           <div className="flex-[2]">
                             <input type="text" placeholder="Reason (Required)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetReason} onChange={e => setReviseBudgetReason(e.target.value)} />
                           </div>
-                          <button onClick={handleReviseBudget} disabled={isSubmitting} className="bg-[var(--text-primary)] text-[var(--bg-document)] font-semibold text-sm px-4 rounded-md">Confirm</button>
+                          <button
+                            type="button"
+                            onClick={handleReviseBudget}
+                            disabled={isSubmitting}
+                            className="inline-flex items-center justify-center gap-2 min-h-9 min-w-[5.5rem] bg-[var(--text-primary)] text-[var(--bg-document)] font-semibold text-sm px-4 rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {pendingSubmit === "revise" ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                                Applying…
+                              </>
+                            ) : (
+                              "Confirm"
+                            )}
+                          </button>
                         </div>
                       </div>
                     )}
@@ -631,7 +746,21 @@ export default function SchemeEntryPage() {
                         </div>
                         <div className="flex items-center justify-end gap-3">
                           <button onClick={() => setAddingSupplement(false)} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium px-4 py-2">Cancel</button>
-                          <button disabled={isSubmitting} onClick={handleAddSupplement} className="bg-[#2ecc71] h-9 hover:bg-[#27ae60] text-white font-semibold text-sm px-6 rounded-md shadow-sm transition">Confirm</button>
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={handleAddSupplement}
+                            className="inline-flex items-center justify-center gap-2 min-h-9 min-w-[7rem] bg-[#2ecc71] hover:bg-[#27ae60] text-white font-semibold text-sm px-6 rounded-md shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#2ecc71]"
+                          >
+                            {pendingSubmit === "supplement" ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                                Adding…
+                              </>
+                            ) : (
+                              "Confirm"
+                            )}
+                          </button>
                         </div>
                       </div>
                     )}
@@ -664,7 +793,21 @@ export default function SchemeEntryPage() {
                               <input type="text" placeholder="Remarks or Reference" className="w-full text-sm p-2 bg-[var(--bg-primary)] border border-[#b3d4ec] rounded-md shadow-sm text-[var(--text-primary)]" value={editSoRemarks} onChange={e => setEditSoRemarks(e.target.value)} />
                               <div className="flex justify-end gap-2 pt-2">
                                 <button onClick={() => setIsEditingSO(false)} className="text-xs font-medium text-[#2980b9] px-3 py-1.5 hover:bg-[rgba(52,152,219,0.1)] rounded">Cancel</button>
-                                <button onClick={handleUpdateSO} disabled={isSubmitting} className="text-xs font-semibold text-white bg-[#3498db] px-4 py-1.5 rounded shadow-sm hover:bg-[#2980b9] transition">Confirm</button>
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateSO}
+                                  disabled={isSubmitting}
+                                  className="inline-flex items-center justify-center gap-1.5 min-w-[5.25rem] text-xs font-semibold text-white bg-[#3498db] px-4 py-1.5 rounded shadow-sm hover:bg-[#2980b9] transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#3498db]"
+                                >
+                                  {pendingSubmit === "so" ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin shrink-0" aria-hidden />
+                                      Updating…
+                                    </>
+                                  ) : (
+                                    "Confirm"
+                                  )}
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -761,8 +904,36 @@ export default function SchemeEntryPage() {
                   Last updated {selected.lastUpdated} by <span className="font-medium text-[var(--text-primary)]">{selected.submitter || "Finance Desk"}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleSaveDraft} disabled={isSubmitting} className="px-5 py-2 rounded-lg text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[rgba(0,0,0,0.02)] transition">Save Draft</button>
-                  <button onClick={handleSaveSubmit} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-sm font-semibold border border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] shadow hover:opacity-90 transition">Save & Submit</button>
+                  <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center justify-center gap-2 min-w-[7.5rem] px-5 py-2 rounded-lg text-sm font-medium border border-[var(--border)] text-[var(--text-primary)] hover:bg-[rgba(0,0,0,0.02)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {pendingSubmit === "draft" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save Draft"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSubmit}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center justify-center gap-2 min-w-[8.5rem] px-6 py-2 rounded-lg text-sm font-semibold border border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-text)] shadow hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:opacity-90"
+                  >
+                    {pendingSubmit === "submitted" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        Submitting…
+                      </>
+                    ) : (
+                      "Save & Submit"
+                    )}
+                  </button>
                 </div>
               </div>
             </>

@@ -1,3 +1,4 @@
+import { asDatabaseUnavailableError, toDatabaseErrorResponse } from "@/lib/db-errors";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/server-auth";
 
@@ -14,27 +15,33 @@ export function toAuthErrorResponse(error: unknown): { status: number; detail: s
   if (error instanceof AuthError) {
     return { status: error.status, detail: error.message };
   }
-  return null;
+  return toDatabaseErrorResponse(error);
 }
 
 export async function getDbUserBySession() {
   const sessionUser = await getSessionUser();
   if (!sessionUser) return null;
-  return prisma.user.findFirst({
-    where: { code: sessionUser.id },
-    include: {
-      userRoles: {
-        include: {
-          role: {
-            include: {
-              rolePermissions: { include: { permission: true } },
+  try {
+    return await prisma.user.findFirst({
+      where: { code: sessionUser.id },
+      include: {
+        userRoles: {
+          include: {
+            role: {
+              include: {
+                rolePermissions: { include: { permission: true } },
+              },
             },
           },
         },
+        permissionOverrides: { include: { permission: true } },
       },
-      permissionOverrides: { include: { permission: true } },
-    },
-  });
+    });
+  } catch (e) {
+    const mapped = asDatabaseUnavailableError(e);
+    if (mapped) throw mapped;
+    throw e;
+  }
 }
 
 export async function getEffectivePermissionCodes(): Promise<Set<string>> {

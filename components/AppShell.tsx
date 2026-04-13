@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function AppShell({ children, title }: Props) {
-  const { theme, mounted } = useTheme();
+  const { mounted } = useTheme();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
   const [chatOpen, setChatOpen] = useState(false);
 

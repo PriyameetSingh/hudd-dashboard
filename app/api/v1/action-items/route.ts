@@ -18,8 +18,8 @@ function mapActionItem(item: {
   priority: ActionItemPriority;
   dueDate: Date;
   status: ActionItemStatus;
-  assignedTo: { name: string } | null;
-  reviewer: { name: string } | null;
+  assignedTo: { name: string; code: string | null } | null;
+  reviewer: { name: string; code: string | null } | null;
   scheme: { code: string } | null;
   updates: Array<{
     id: string;
@@ -44,6 +44,8 @@ function mapActionItem(item: {
     status: item.status,
     assignedTo: item.assignedTo?.name ?? "",
     reviewer: item.reviewer?.name ?? "",
+    assignedToUserCode: item.assignedTo?.code ?? null,
+    reviewerUserCode: item.reviewer?.code ?? null,
     schemeId: item.scheme?.code ?? "",
     daysOverdue: overdueDays,
     updates: item.updates.map((update) => ({
@@ -68,8 +70,8 @@ export async function GET() {
       include: {
         scheme: { select: { code: true } },
         vertical: { select: { name: true } },
-        assignedTo: { select: { name: true } },
-        reviewer: { select: { name: true } },
+        assignedTo: { select: { name: true, code: true } },
+        reviewer: { select: { name: true, code: true } },
         updates: {
           orderBy: { timestamp: "asc" },
           include: {

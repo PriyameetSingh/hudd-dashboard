@@ -2,9 +2,82 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { UserRole, getCurrentUser } from "@/lib/auth";
-import { useTheme } from "./ThemeProvider";
+import { UserRole, getCurrentUser, type MockUser } from "@/lib/auth";
+import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
+import type { ActionItem, KPISubmission } from "@/types";
 import { LayoutDashboard, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
+
+const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+
+function isAssignedToUser(item: ActionItem, user: MockUser) {
+  const target = normalize(user.name);
+  return target.length > 0 && normalize(item.assignedTo).includes(target);
+}
+
+function isPendingAction(item: ActionItem) {
+  return item.status !== "COMPLETED";
+}
+
+function isOverdue(item: ActionItem) {
+  if (item.status === "OVERDUE") return true;
+  const due = new Date(item.dueDate);
+  const now = new Date();
+  return due < now;
+}
+
+function isDueWithinWeek(item: ActionItem) {
+  const due = new Date(item.dueDate);
+  const now = new Date();
+  const week = new Date();
+  week.setDate(now.getDate() + 7);
+  return due >= now && due <= week;
+}
+
+function pendingAssignedBadgeState(items: ActionItem[], user: MockUser): { count: number; tone: "red" | "yellow" | "green" | null } {
+  const mine = items.filter((item) => isAssignedToUser(item, user) && isPendingAction(item));
+  const count = mine.length;
+  if (count === 0) return { count: 0, tone: null };
+  const anyOverdue = mine.some(isOverdue);
+  if (anyOverdue) return { count, tone: "red" };
+  const anyDueSoon = mine.some(isDueWithinWeek);
+  if (anyDueSoon) return { count, tone: "yellow" };
+  return { count, tone: "green" };
+}
+
+function isPendingKpiEntryForAssignee(submission: KPISubmission, assigneeDbUserId: string | null) {
+  if (!assigneeDbUserId || !submission.assignedToUserId) return false;
+  if (submission.assignedToUserId !== assigneeDbUserId) return false;
+  return submission.status === "not_submitted" || submission.status === "draft";
+}
+
+/** Red if any overdue, else yellow if any delayed, else green (mirrors action-item badge semantics). */
+function pendingKpiEntryBadgeState(
+  submissions: KPISubmission[],
+  assigneeDbUserId: string | null,
+): { count: number; tone: "red" | "yellow" | "green" | null } {
+  const mine = submissions.filter((s) => isPendingKpiEntryForAssignee(s, assigneeDbUserId));
+  const count = mine.length;
+  if (count === 0) return { count: 0, tone: null };
+  const anyOverdue = mine.some((s) => s.measurementProgressStatus === "overdue");
+  if (anyOverdue) return { count, tone: "red" };
+  const anyDelayed = mine.some((s) => s.measurementProgressStatus === "delayed");
+  if (anyDelayed) return { count, tone: "yellow" };
+  return { count, tone: "green" };
+}
+
+async function fetchSessionDbUserId(): Promise<string | null> {
+  const response = await fetch("/api/v1/rbac/me", { cache: "no-store" });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { user: { dbId: string | null } | null };
+  return data.user?.dbId ?? null;
+}
+
+const BADGE_TONE_CLASS: Record<"red" | "yellow" | "green", string> = {
+  red: "text-red-600 dark:text-red-400",
+  yellow: "text-amber-600 dark:text-amber-400",
+  green: "text-emerald-600 dark:text-emerald-400",
+};
 
 type NavItem = {
   label: string;
@@ -130,11 +203,60 @@ const badgeColors: Record<UserRole, string> = {
 export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
-  const { theme, mounted } = useTheme();
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [kpiSubmissions, setKpiSubmissions] = useState<KPISubmission[]>([]);
+  const [assigneeDbUserId, setAssigneeDbUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    setUser(getCurrentUser());
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const u = getCurrentUser();
+      setUser(u);
+      if (!u) {
+        setAssigneeDbUserId(null);
+        setKpiSubmissions([]);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await fetchActionItems();
+          if (active) setActionItems(data);
+        } catch {
+          if (active) setActionItems([]);
+        }
+      })();
+      if (u.role === UserRole.NODAL_OFFICER) {
+        void (async () => {
+          try {
+            const [dbId, kpiData] = await Promise.all([fetchSessionDbUserId(), fetchKPISubmissions()]);
+            if (active) {
+              setAssigneeDbUserId(dbId);
+              setKpiSubmissions(kpiData.submissions);
+            }
+          } catch {
+            if (active) {
+              setAssigneeDbUserId(null);
+              setKpiSubmissions([]);
+            }
+          }
+        })();
+      } else {
+        setAssigneeDbUserId(null);
+        setKpiSubmissions([]);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const actionItemsBadge = useMemo(() => {
+    if (!user) return null;
+    return pendingAssignedBadgeState(actionItems, user);
+  }, [actionItems, user]);
+
+  const kpiEntryBadge = useMemo(() => pendingKpiEntryBadgeState(kpiSubmissions, assigneeDbUserId), [kpiSubmissions, assigneeDbUserId]);
 
   const roleBadge = useMemo(() => {
     if (!user) return null;
@@ -174,8 +296,18 @@ export default function Sidebar() {
                 className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
               >
                 <item.icon size={16} />
-                {item.label}
-                {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto opacity-80">{item.badge}</span>}
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate">{item.label}</span>
+                  {item.href === "/action-items" && actionItemsBadge && actionItemsBadge.count > 0 && actionItemsBadge.tone && (
+                    <span
+                      className={`shrink-0 tabular-nums text-[13px] font-semibold ${BADGE_TONE_CLASS[actionItemsBadge.tone]}`}
+                      title="Pending action items assigned to you"
+                    >
+                      ({actionItemsBadge.count})
+                    </span>
+                  )}
+                </span>
+                {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto shrink-0 opacity-80">{item.badge}</span>}
               </Link>
               {childLinks.length > 0 && (
                 <ul
@@ -200,7 +332,17 @@ export default function Sidebar() {
                           <span className="shrink-0 opacity-90" aria-hidden>
                             <child.icon size={14} />
                           </span>
-                          <span className="truncate">{child.label}</span>
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="truncate">{child.label}</span>
+                            {child.href === "/kpis/entry" && kpiEntryBadge.count > 0 && kpiEntryBadge.tone && (
+                              <span
+                                className={`shrink-0 tabular-nums text-[13px] font-semibold ${BADGE_TONE_CLASS[kpiEntryBadge.tone]}`}
+                                title="KPI entries pending for you (action owner)"
+                              >
+                                ({kpiEntryBadge.count})
+                              </span>
+                            )}
+                          </span>
                         </Link>
                       </li>
                     );
@@ -212,7 +354,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">{mounted ? (theme === "dark" ? "Dark" : "Light") : ""} / HUDD Identifier</div>
+      <div className="px-4 py-3 border-t border-[var(--sidebar-border)] text-[11px] text-[var(--sidebar-text-muted)]">HUDD Identifier</div>
     </aside>
   );
 }

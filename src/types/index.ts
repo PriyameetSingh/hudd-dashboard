@@ -65,6 +65,11 @@ export interface ActionItem {
   status: ActionItemStatus;
   assignedTo: string;
   reviewer: string;
+  /** User `code` when loaded from API; used for reassignment UI. */
+  assignedToUserCode?: string | null;
+  reviewerUserCode?: string | null;
+  assignedToUserId?: string;
+  reviewerUserId?: string;
   schemeId: string;
   daysOverdue?: number;
   updates: ActionItemUpdate[];
@@ -74,6 +79,9 @@ export interface ActionItem {
 type KPICategory = "STATE" | "CENTRAL";
 export type KPIType = "OUTPUT" | "OUTCOME" | "BINARY";
 export type KPIStatus = "not_submitted" | "draft" | "submitted" | "submitted_pending" | "approved";
+
+/** Latest measurement progress (on_track / delayed / overdue); null if no measurement yet. */
+export type KPIMeasurementProgressStatus = "on_track" | "delayed" | "overdue";
 
 export interface KPISubmission {
   id: string;
@@ -89,6 +97,8 @@ export interface KPISubmission {
   denominator?: number | null;
   yes?: boolean | null;
   status: KPIStatus;
+  /** Latest measurement KPI progress (for urgency / sidebar badge). */
+  measurementProgressStatus?: KPIMeasurementProgressStatus | null;
   lastUpdated: string;
   remarks?: string;
   /** Present when KPI has a named action owner (same as assignedToUserId). */

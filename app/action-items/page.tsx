@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
-import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import { fetchActionItems, updateActionItem } from "@/src/lib/services/actionItemService";
 import { ActionItem, ActionItemStatus } from "@/types";
-import { UserRole } from "@/lib/auth";
+import { MOCK_USERS, UserRole, hasPermission, Permission } from "@/lib/auth";
+import SearchableUserSelector from "@/src/components/ui/SearchableUserSelector";
 import StatusBadge from "@/src/components/ui/StatusBadge";
 import PriorityBadge from "@/src/components/ui/PriorityBadge";
 
@@ -39,6 +40,29 @@ export default function ActionItemsPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [dueFilter, setDueFilter] = useState("all");
+  const [reassignItem, setReassignItem] = useState<ActionItem | null>(null);
+  const [reassignAssignee, setReassignAssignee] = useState("");
+  const [reassignReviewer, setReassignReviewer] = useState("");
+  const [reassignBusy, setReassignBusy] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+
+  const openReassignModal = (item: ActionItem) => {
+    const assign =
+      item.assignedToUserCode?.trim() ||
+      MOCK_USERS.find((u) => normalize(u.name) === normalize(item.assignedTo))?.id ||
+      MOCK_USERS[0]?.id ||
+      "";
+    let rev =
+      item.reviewerUserCode?.trim() ||
+      MOCK_USERS.find((u) => normalize(u.name) === normalize(item.reviewer))?.id ||
+      "";
+    if (!rev) rev = MOCK_USERS.find((u) => u.id !== assign)?.id ?? "";
+    if (rev === assign) rev = MOCK_USERS.find((u) => u.id !== assign)?.id ?? rev;
+    setReassignAssignee(assign);
+    setReassignReviewer(rev);
+    setReassignError(null);
+    setReassignItem(item);
+  };
 
   useEffect(() => {
     let active = true;
@@ -121,6 +145,8 @@ export default function ActionItemsPage() {
 
   const isViewer = user?.role === UserRole.VIEWER;
   const showStats = user && [UserRole.TASU, UserRole.AS, UserRole.PS_HUDD].includes(user.role);
+  const canReassignActionItems =
+    !!user && !isViewer && hasPermission(user, Permission.UPDATE_ACTION_ITEMS);
 
   return (
     <AppShell title="Action Items">
@@ -303,11 +329,14 @@ export default function ActionItemsPage() {
                         <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Upload Proof</button>
                       </>
                     )}
-                    {user?.role === UserRole.TASU && !isViewer && (
-                      <>
-                        <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Reassign</button>
-                        <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Escalate</button>
-                      </>
+                    {canReassignActionItems && (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+                        onClick={() => openReassignModal(item)}
+                      >
+                        Reassign
+                      </button>
                     )}
                     {[UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user?.role ?? UserRole.VIEWER) && !isViewer && (
                       <>
@@ -322,6 +351,92 @@ export default function ActionItemsPage() {
           </div>
         )}
       </div>
+
+      {reassignItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reassign-title"
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-2xl"
+          >
+            <h3 id="reassign-title" className="text-lg font-semibold text-[var(--text-primary)]">
+              Reassign
+            </h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Update the assigned officer and reviewer for &ldquo;{reassignItem.title}&rdquo;.
+            </p>
+            {reassignError && (
+              <p className="mt-3 text-sm text-[var(--alert-critical)]">{reassignError}</p>
+            )}
+            <div className="mt-4 space-y-4">
+              <SearchableUserSelector
+                label="Assigned to"
+                catalog={MOCK_USERS}
+                users={MOCK_USERS.filter((u) => u.id !== reassignReviewer)}
+                value={reassignAssignee}
+                onChange={(value) => {
+                  setReassignAssignee(value);
+                  if (value === reassignReviewer) {
+                    const next = MOCK_USERS.find((u) => u.id !== value)?.id ?? value;
+                    setReassignReviewer(next);
+                  }
+                }}
+              />
+              <SearchableUserSelector
+                label="Reviewer"
+                catalog={MOCK_USERS}
+                users={MOCK_USERS.filter((u) => u.id !== reassignAssignee)}
+                value={reassignReviewer}
+                onChange={(value) => {
+                  setReassignReviewer(value);
+                  if (value === reassignAssignee) {
+                    const next = MOCK_USERS.find((u) => u.id !== value)?.id ?? value;
+                    setReassignAssignee(next);
+                  }
+                }}
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)]"
+                disabled={reassignBusy}
+                onClick={() => setReassignItem(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)] disabled:opacity-50"
+                disabled={reassignBusy || reassignAssignee === reassignReviewer}
+                onClick={async () => {
+                  if (reassignAssignee === reassignReviewer) {
+                    setReassignError("Assigned officer and reviewer must be different.");
+                    return;
+                  }
+                  setReassignBusy(true);
+                  setReassignError(null);
+                  try {
+                    const updated = await updateActionItem(reassignItem.id, {
+                      assignedToUserCode: reassignAssignee,
+                      reviewerUserCode: reassignReviewer,
+                    });
+                    setItems((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+                    setReassignItem(null);
+                  } catch (e: unknown) {
+                    setReassignError(e instanceof Error ? e.message : "Reassign failed");
+                  } finally {
+                    setReassignBusy(false);
+                  }
+                }}
+              >
+                {reassignBusy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
