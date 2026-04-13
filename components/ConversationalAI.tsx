@@ -96,7 +96,16 @@ export default function ConversationalAI() {
   }
 
   return (
-    <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 0, height: "calc(100vh - 48px)" }}>
+    <div
+      style={{
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 0,
+        height: "calc(100vh - 48px)",
+        backgroundColor: "var(--bg-card)",
+      }}
+    >
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Ask NEXUS</h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Conversational intelligence — type or speak your query</p>
