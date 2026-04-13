@@ -1,4 +1,4 @@
-import { FinanceSummaryRow, FinancialEntry } from "@/types";
+import { FinanceSummaryRow, FinancialEntry, FinanceYearBudgetAllocationLineRow } from "@/types";
 
 type FinancialEntriesResponse = {
   entries: FinancialEntry[];
@@ -87,6 +87,38 @@ export async function saveFinanceSummary(input: {
 }): Promise<void> {
   const response = await fetch("/api/v1/financial/summary", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ ok: boolean }>(response);
+}
+
+export async function fetchFyBudgetAllocation(params?: { financialYearLabel?: string }): Promise<{
+  financialYearLabel: string | null;
+  allocationId: string | null;
+  totalBudgetCr: number;
+  lines: FinanceYearBudgetAllocationLineRow[];
+  totals: { budgetEstimateCr: number; soExpenditureCr: number; ifmsExpenditureCr: number };
+}> {
+  const search = new URLSearchParams();
+  if (params?.financialYearLabel) search.set("financialYearLabel", params.financialYearLabel);
+  const q = search.toString();
+  const response = await fetch(`/api/v1/financial/fy-budget-allocation${q ? `?${q}` : ""}`, { cache: "no-store" });
+  return parseResponse(response);
+}
+
+export async function saveFyBudgetAllocation(input: {
+  financialYearLabel?: string;
+  totalBudgetCr: number;
+  lines: Array<{
+    category: FinanceYearBudgetAllocationLineRow["category"];
+    budgetEstimateCr: number;
+    soExpenditureCr: number;
+    ifmsExpenditureCr: number;
+  }>;
+}): Promise<void> {
+  const response = await fetch("/api/v1/financial/fy-budget-allocation", {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });

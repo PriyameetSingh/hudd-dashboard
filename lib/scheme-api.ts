@@ -26,12 +26,14 @@ export function toIsoDate(value: Date): string {
 
 export function normalizeSponsorshipType(value: unknown): SponsorshipType {
   if (value === "STATE") return "STATE";
+  if (value === "CENTRAL_SECTOR") return "CENTRAL_SECTOR";
   return "CENTRAL";
 }
 
 export function parseSponsorshipType(value: unknown): SponsorshipType | null {
   if (value === "STATE") return "STATE";
   if (value === "CENTRAL") return "CENTRAL";
+  if (value === "CENTRAL_SECTOR") return "CENTRAL_SECTOR";
   return null;
 }
 

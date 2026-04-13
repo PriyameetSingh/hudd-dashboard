@@ -8,9 +8,14 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Scheme sponsorship; maps to FinanceYearBudgetCategory for scheme buckets:
+/// STATE → STATE_SCHEME, CENTRAL → CENTRALLY_SPONSORED_SCHEME, CENTRAL_SECTOR → CENTRAL_SECTOR_SCHEME
 enum SponsorshipType {
+  /// State sector scheme → FY line STATE_SCHEME
   STATE
+  /// Centrally Sponsored Scheme → FY line CENTRALLY_SPONSORED_SCHEME
   CENTRAL
+  /// Central Sector Scheme → FY line CENTRAL_SECTOR_SCHEME
   CENTRAL_SECTOR
 }
 
@@ -83,6 +88,17 @@ enum ActionItemStatus {
   OVERDUE
 }
 
+/// Buckets for per–financial-year budget allocation (budget + SO + IFMS per line)
+enum FinanceYearBudgetCategory {
+  STATE_SCHEME
+  CENTRALLY_SPONSORED_SCHEME
+  CENTRAL_SECTOR_SCHEME
+  STATE_FINANCE_COMMISSION
+  UNION_FINANCE_COMMISSION
+  OTHER_TRANSFER_STAMP_DUTY
+  ADMIN_EXPENDITURE
+}
+
 model User {
   id         String   @id @default(uuid()) @db.Uuid
   code       String?  @unique
@@ -117,6 +133,7 @@ model User {
   uploadedFiles         File[]                 @relation("FileUploadedBy")
   actionItemProofs      ActionItemProof[]      @relation("ActionItemProofUploadedBy")
   createdBudgetSupplements FinanceBudgetSupplement[] @relation("FinanceBudgetSupplementCreatedBy")
+  createdFinanceYearBudgetAllocations FinanceYearBudgetAllocation[] @relation("FinanceYearBudgetAllocationCreatedBy")
 
   auditLogs             AuditLog[]
 
@@ -216,7 +233,7 @@ model FinancialYear {
   financeSummaryHeads       FinanceSummaryHead[]
   kpiTargets                KpiTarget[]
   supplements FinanceBudgetSupplement[]
-
+  financeYearBudgetAllocation FinanceYearBudgetAllocation?
 
   @@map("financial_years")
 }
@@ -596,4 +613,35 @@ model FinanceBudgetSupplement {
 
   @@index([schemeId, financialYearId])
   @@map("finance_budget_supplements")
+}
+
+/// Per–financial-year total and breakdown; totalBudgetCr should equal sum of category line budgetEstimateCr (enforce in app).
+model FinanceYearBudgetAllocation {
+  id               String   @id @default(uuid()) @db.Uuid
+  financialYearId  String   @unique @db.Uuid
+  totalBudgetCr    Decimal  @db.Decimal(16, 2)
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("FinanceYearBudgetAllocationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  categoryLines FinanceYearBudgetCategoryLine[]
+
+  @@map("finance_year_budget_allocations")
+}
+
+model FinanceYearBudgetCategoryLine {
+  id                String   @id @default(uuid()) @db.Uuid
+  allocationId      String   @db.Uuid
+  category          FinanceYearBudgetCategory
+  budgetEstimateCr  Decimal  @db.Decimal(16, 2)
+  soExpenditureCr   Decimal  @db.Decimal(16, 2)
+  ifmsExpenditureCr Decimal  @db.Decimal(16, 2)
+
+  allocation FinanceYearBudgetAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+
+  @@unique([allocationId, category])
+  @@map("finance_year_budget_category_lines")
 }

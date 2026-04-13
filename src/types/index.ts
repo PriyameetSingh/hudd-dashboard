@@ -205,6 +205,24 @@ export interface FinanceSummaryRow {
   ifmsExpenditureCr: number;
 }
 
+/** Per–FY budget buckets (matches Prisma `FinanceYearBudgetCategory`). */
+export type FinanceYearBudgetCategory =
+  | "STATE_SCHEME"
+  | "CENTRALLY_SPONSORED_SCHEME"
+  | "CENTRAL_SECTOR_SCHEME"
+  | "STATE_FINANCE_COMMISSION"
+  | "UNION_FINANCE_COMMISSION"
+  | "OTHER_TRANSFER_STAMP_DUTY"
+  | "ADMIN_EXPENDITURE";
+
+export interface FinanceYearBudgetAllocationLineRow {
+  category: FinanceYearBudgetCategory;
+  label: string;
+  budgetEstimateCr: number;
+  soExpenditureCr: number;
+  ifmsExpenditureCr: number;
+}
+
 export interface PendingApprovalSummary {
   role: UserRole;
   financial: number;
@@ -212,7 +230,7 @@ export interface PendingApprovalSummary {
   actionItems: number;
 }
 
-export type SponsorshipType = "STATE" | "CENTRAL";
+export type SponsorshipType = "STATE" | "CENTRAL" | "CENTRAL_SECTOR";
 
 export type SchemeAssignmentKind = "dashboard_owner" | "kpi_owner_1" | "kpi_owner_2" | "action_item_owner_1" | "action_item_owner_2";
 

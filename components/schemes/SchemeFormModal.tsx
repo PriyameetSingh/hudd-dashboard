@@ -280,8 +280,9 @@ export default function SchemeFormModal({ open, onClose, scheme, reference, onSa
               onChange={(event) => setForm((prev) => ({ ...prev, sponsorshipType: event.target.value as SponsorshipType }))}
               className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
             >
-              <option value="STATE">STATE</option>
-              <option value="CENTRAL">CENTRAL</option>
+              <option value="STATE">State sector</option>
+              <option value="CENTRAL">Centrally sponsored</option>
+              <option value="CENTRAL_SECTOR">Central sector</option>
             </select>
           </label>
 

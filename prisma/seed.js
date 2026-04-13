@@ -276,6 +276,46 @@ const ACTION_ITEMS = [
   },
 ];
 
+/** Matches prisma `FinanceYearBudgetCategory`; ensures FY allocation + seven zero lines exist. */
+const FINANCE_YEAR_BUDGET_CATEGORIES = [
+  "STATE_SCHEME",
+  "CENTRALLY_SPONSORED_SCHEME",
+  "CENTRAL_SECTOR_SCHEME",
+  "STATE_FINANCE_COMMISSION",
+  "UNION_FINANCE_COMMISSION",
+  "OTHER_TRANSFER_STAMP_DUTY",
+  "ADMIN_EXPENDITURE",
+];
+
+async function ensureFinanceYearBudgetAllocationForYear(financialYearId) {
+  let allocation = await prisma.financeYearBudgetAllocation.findUnique({
+    where: { financialYearId },
+  });
+  if (!allocation) {
+    allocation = await prisma.financeYearBudgetAllocation.create({
+      data: {
+        financialYearId,
+        totalBudgetCr: 0,
+      },
+    });
+  }
+  for (const category of FINANCE_YEAR_BUDGET_CATEGORIES) {
+    await prisma.financeYearBudgetCategoryLine.upsert({
+      where: {
+        allocationId_category: { allocationId: allocation.id, category },
+      },
+      update: {},
+      create: {
+        allocationId: allocation.id,
+        category,
+        budgetEstimateCr: 0,
+        soExpenditureCr: 0,
+        ifmsExpenditureCr: 0,
+      },
+    });
+  }
+}
+
 async function main() {
   const now = new Date();
 
@@ -327,6 +367,11 @@ async function main() {
 
   const fy = await prisma.financialYear.findUnique({ where: { label: "2025-26" } });
   if (!fy) throw new Error("Financial year not found");
+
+  const allFys = await prisma.financialYear.findMany({ select: { id: true } });
+  for (const row of allFys) {
+    await ensureFinanceYearBudgetAllocationForYear(row.id);
+  }
 
   for (const u of USERS) {
     const user = await prisma.user.upsert({
