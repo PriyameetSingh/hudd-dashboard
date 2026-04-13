@@ -406,16 +406,16 @@ export default function ActionItemsPage() {
                   <div className="mt-5 flex flex-wrap items-center gap-2">
                     <Link
                       href={`/action-items/${item.id}`}
-                      className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+                      className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-primary)]"
                     >
                       View Details
                     </Link>
-                    {user?.role === UserRole.NODAL_OFFICER && !isViewer && (
+                    {/* {user?.role === UserRole.NODAL_OFFICER && !isViewer && (
                       <>
                         <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Update Status</button>
                         <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Upload Proof</button>
                       </>
-                    )}
+                    )} */}
                     {canReassignActionItems && (
                       <button
                         type="button"
