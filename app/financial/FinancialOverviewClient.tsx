@@ -279,7 +279,7 @@ export default function FinancialOverviewClient({
                 onClick={() => setPreset(id)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   preset === id
-                    ? "border-[var(--text-primary)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                    ? "border-[var(--text-primary)] bg-[var(--bg-hover)] text-[var(--text-primary)]"
                     : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-muted)]"
                 }`}
               >
