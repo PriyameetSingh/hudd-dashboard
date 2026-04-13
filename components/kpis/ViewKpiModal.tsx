@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { KPISubmission } from "@/types";
+import ReassignKpiModal from "@/components/kpis/ReassignKpiModal";
 import { KpiMeasurementHistory, fetchKpiHistory, reviewKpiMeasurement } from "@/src/lib/services/kpiService";
 
 type Props = {
@@ -67,6 +68,7 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
   const [rejectNote, setRejectNote] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
   const rejectRef = useRef<HTMLTextAreaElement>(null);
+  const [reassignOpen, setReassignOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !submission) return;
@@ -92,6 +94,10 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
       })
       .finally(() => setLoading(false));
   }, [open, submission]);
+
+  useEffect(() => {
+    if (!open) setReassignOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (showRejectInput) rejectRef.current?.focus();
@@ -177,6 +183,31 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
           >
             Close
           </button>
+        </div>
+
+        <div className="border-b border-[var(--border)] px-6 pb-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--text-muted)]">Ownership</p>
+            {submission.currentUserCanReassignOwners && (
+              <button
+                type="button"
+                onClick={() => setReassignOpen(true)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-surface)]"
+              >
+                Reassign
+              </button>
+            )}
+          </div>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Action owner</p>
+              <p className="mt-1 text-sm text-[var(--text-primary)]">{submission.assignedToName?.trim() || "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Reviewer</p>
+              <p className="mt-1 text-sm text-[var(--text-primary)]">{submission.reviewerName?.trim() || "—"}</p>
+            </div>
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -347,6 +378,15 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
           </div>
         </div>
       </div>
+
+      <ReassignKpiModal
+        open={reassignOpen}
+        submission={submission}
+        onClose={() => setReassignOpen(false)}
+        onSaved={() => {
+          onReviewed();
+        }}
+      />
     </div>
   );
 }

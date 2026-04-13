@@ -184,10 +184,14 @@ export default function KPIsPage() {
                     </div>
                     <StatusBadge status={item.status} />
                   </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-4 text-sm text-[var(--text-muted)]">
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-5 text-sm text-[var(--text-muted)]">
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em]">Action owner</p>
-                      <p className="mt-1 text-sm text-[var(--text-primary)]">{item.assignedToName ?? "—"}</p>
+                      <p className="mt-1 text-sm text-[var(--text-primary)]">{item.assignedToName?.trim() || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em]">Reviewer</p>
+                      <p className="mt-1 text-sm text-[var(--text-primary)]">{item.reviewerName?.trim() || "—"}</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em]">Submitted On</p>
@@ -264,6 +268,8 @@ export default function KPIsPage() {
                   <tr className="border-b border-[var(--border)]">
                     <th className="py-3 pr-4">Scheme</th>
                     <th className="py-3 pr-4">Metric</th>
+                    <th className="py-3 pr-4">Action owner</th>
+                    <th className="py-3 pr-4">Reviewer</th>
                     <th className="py-3 pr-4">Type</th>
                     <th className="py-3 pr-4">Unit</th>
                     <th className="py-3 pr-4">Last Updated</th>
@@ -282,6 +288,8 @@ export default function KPIsPage() {
                         <p className="font-medium">{item.description}</p>
                         <p className="text-xs text-[var(--text-muted)]">{item.vertical} · {item.category}</p>
                       </td>
+                      <td className="py-3 pr-4 text-[var(--text-muted)]">{item.assignedToName?.trim() || "—"}</td>
+                      <td className="py-3 pr-4 text-[var(--text-muted)]">{item.reviewerName?.trim() || "—"}</td>
                       <td className="py-3 pr-4 text-[var(--text-muted)]">{item.type}</td>
                       <td className="py-3 pr-4 text-[var(--text-muted)]">{item.unit}</td>
                       <td className="py-3 pr-4 text-[var(--text-muted)]">{item.lastUpdated}</td>

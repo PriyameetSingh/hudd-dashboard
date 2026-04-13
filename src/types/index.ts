@@ -110,6 +110,8 @@ export interface KPISubmission {
   currentUserCanEnter?: boolean;
   /** Server-computed for the current session (APPROVE_KPI + assignment). */
   currentUserCanReview?: boolean;
+  /** Server-computed: MANAGE_SCHEMES — may change action owner and reviewer. */
+  currentUserCanReassignOwners?: boolean;
 }
 
 export type FinancialEntryStatus =

@@ -100,6 +100,18 @@ export async function fetchKpiHistory(kpiDefinitionId: string): Promise<KpiHisto
   return parseResponse<KpiHistoryResponse>(response);
 }
 
+export async function updateKpiDefinitionAssignments(
+  kpiDefinitionId: string,
+  input: { assignedToId: string; reviewerId: string },
+): Promise<void> {
+  const response = await fetch(`/api/v1/kpis/definitions/${kpiDefinitionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseResponse<{ ok: boolean }>(response);
+}
+
 export async function createKpiDefinition(input: {
   schemeId: string;
   subschemeId?: string | null;

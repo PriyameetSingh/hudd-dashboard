@@ -9,9 +9,9 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-type UserOption = { id: string; code: string | null; name: string; email: string };
+export type KpiUserOption = { id: string; code: string | null; name: string; email: string };
 
-function matchesUserSearch(u: UserOption, q: string): boolean {
+function matchesUserSearch(u: KpiUserOption, q: string): boolean {
   const s = q.trim().toLowerCase();
   if (!s) return true;
   return (
@@ -21,7 +21,7 @@ function matchesUserSearch(u: UserOption, q: string): boolean {
   );
 }
 
-function SearchableUserField({
+export function SearchableKpiUserField({
   label,
   hint,
   users,
@@ -32,7 +32,7 @@ function SearchableUserField({
 }: {
   label: string;
   hint?: string;
-  users: UserOption[];
+  users: KpiUserOption[];
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
@@ -66,7 +66,7 @@ function SearchableUserField({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const formatUserLine = (u: UserOption) => (
+  const formatUserLine = (u: KpiUserOption) => (
     <>
       {u.name}
       {u.code ? ` (${u.code})` : ""}
@@ -120,7 +120,7 @@ function SearchableUserField({
                   type="button"
                   role="option"
                   aria-selected={value === ""}
-                  className="w-full rounded-lg px-2 py-1.5 text-left text-[var(--text-muted)] hover:bg-[var(--bg-surface)]"
+                  className="w-full rounded-lg px-2 py-1.5 text-left text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
                   onClick={() => {
                     onChange("");
                     setOpen(false);
@@ -143,7 +143,7 @@ function SearchableUserField({
                         disabled={excluded}
                         aria-selected={value === u.id}
                         title={excluded ? "Already chosen for the other role" : undefined}
-                        className="w-full rounded-lg px-2 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-surface)] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full rounded-lg px-2 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={() => {
                           if (excluded) return;
                           onChange(u.id);
@@ -339,7 +339,7 @@ export default function AddKpiModal({ open, onClose, scheme, users, onSaved }: P
             </label>
           )}
           <div className="grid gap-3 md:grid-cols-2">
-            <SearchableUserField
+            <SearchableKpiUserField
               label="Action owner"
               hint="Enters and updates KPI progress"
               users={users}
@@ -348,7 +348,7 @@ export default function AddKpiModal({ open, onClose, scheme, users, onSaved }: P
               disabled={userPickerDisabled}
               excludeUserId={reviewerId}
             />
-            <SearchableUserField
+            <SearchableKpiUserField
               label="Reviewer"
               hint="Confirms submitted updates"
               users={users}

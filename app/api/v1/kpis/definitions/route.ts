@@ -127,6 +127,7 @@ export async function GET() {
         reviewerName: definition.reviewer?.name ?? null,
         currentUserCanEnter,
         currentUserCanReview,
+        currentUserCanReassignOwners: canManageSchemes,
       };
     }),
   );
