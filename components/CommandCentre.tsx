@@ -1,41 +1,17 @@
 "use client";
+
 import { getCurrentUser, UserRole } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useMemo, useEffect, useState } from "react";
-import { useData } from "@/context/DataContext";
-import { AlertTriangle, TrendingUp, TrendingDown, Zap, Clock, ArrowUpRight, FileDown } from "lucide-react";
-import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
+import { AlertTriangle, TrendingUp, Clock, ArrowUpRight } from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchPendingApprovalSummaries } from "@/src/lib/services/approvalService";
+import { fetchCommandCentreDashboard } from "@/src/lib/services/dashboardService";
+import type { CommandCentreDashboard } from "@/lib/command-centre-dashboard";
 import ApprovalCard from "@/src/components/ui/ApprovalCard";
 import { PendingApprovalSummary } from "@/types";
-
-function SparkLine({ data }: { data: number[] }) {
-  const pts = data.map((v, i) => ({ v, i }));
-  return (
-    <ResponsiveContainer width="100%" height={32}>
-      <LineChart data={pts}>
-        <Line type="monotone" dataKey="v" stroke="var(--text-muted)" strokeWidth={1.5} dot={false} />
-        <Tooltip
-          contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", fontSize: 11, color: "var(--text-primary)" }}
-          formatter={(v) => [`${v}%`, ""]}
-          labelFormatter={() => ""}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-const ROLE_BANNER: Partial<Record<UserRole, string>> = {
-  [UserRole.ACS]: "Full system view — all departments and schemes",
-  [UserRole.PS_HUDD]: "HUDD department view — all verticals",
-  [UserRole.AS]: "Assigned verticals view",
-};
-
-const APPROVAL_ROUTES: Partial<Record<UserRole, string>> = {
-  [UserRole.ACS]: "/financial",
-  [UserRole.PS_HUDD]: "/financial",
-  [UserRole.AS]: "/kpis",
-};
+import AiAlertsCard from "@/components/command-centre/AiAlertsCard";
+import CommandCentreSparkLine from "@/components/command-centre/CommandCentreSparkLine";
 
 function statusColor(s: string) {
   if (s === "critical") return "var(--alert-critical)";
@@ -45,20 +21,31 @@ function statusColor(s: string) {
 
 function statusLabel(s: string) {
   if (s === "critical") return "CRITICAL";
-  if (s === "warning") return "LAGGING";
+  if (s === "warning") return "AT RISK";
   return "ON TRACK";
 }
 
-interface Props { setActive: (id: string) => void; }
+function formatCr(value: number) {
+  if (value >= 100) return `₹${value.toFixed(0)} Cr`;
+  return `₹${value.toFixed(2)} Cr`;
+}
+
+function pctTrendFromValue(pct: number): number[] {
+  const p = Math.min(100, Math.max(0, pct));
+  return [p * 0.45, p * 0.58, p * 0.68, p * 0.78, p * 0.88, p].map((x) => Math.round(x * 10) / 10);
+}
+
+interface Props {
+  setActive: (id: string) => void;
+}
 
 export default function CommandCentre({ setActive }: Props) {
-  const { totalBudget, verticals, nba: nbaRecommendations, actions: actionPoints } = useData();
   const router = useRouter();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
   const [pendingSummaries, setPendingSummaries] = useState<PendingApprovalSummary[]>([]);
-  const criticalCount = verticals.filter(v => v.status === "critical").length;
-  const overdueActions = actionPoints.filter(a => a.status === "overdue").length;
-  const lapseRisk = (((9882.56 - 4796.84) / 9882.56) * 100).toFixed(1);
+  const [dashboard, setDashboard] = useState<CommandCentreDashboard | null>(null);
+  const [dashError, setDashError] = useState<string | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -77,12 +64,32 @@ export default function CommandCentre({ setActive }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const d = await fetchCommandCentreDashboard();
+        if (!alive) return;
+        setDashboard(d);
+        setDashError(null);
+      } catch (e) {
+        if (!alive) return;
+        setDashError(e instanceof Error ? e.message : "Failed to load dashboard");
+        setDashboard(null);
+      } finally {
+        if (alive) setDashLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const pendingSummary = useMemo(() => {
     if (!user) return null;
-    return pendingSummaries.find(entry => entry.role === user.role) ?? null;
+    return pendingSummaries.find((entry) => entry.role === user.role) ?? null;
   }, [user, pendingSummaries]);
 
-  const banner = user ? ROLE_BANNER[user.role] : "Command Centre";
   const isViewer = user?.role === UserRole.VIEWER;
 
   const approvalCards = [
@@ -109,40 +116,126 @@ export default function CommandCentre({ setActive }: Props) {
     },
   ];
 
+  const totals = dashboard?.totals;
+  const utilPct = totals ? totals.utilisationPct.toFixed(1) : "—";
+  const lapsePct =
+    totals && totals.totalBudgetCr > 0 ? ((totals.lapseRiskCr / totals.totalBudgetCr) * 100).toFixed(1) : "—";
+
+  const ifmsChartData =
+    dashboard?.ifmsTrend.map((p) => ({
+      d: p.asOfDate.slice(5),
+      ifms: Math.round(p.ifmsCr * 10) / 10,
+    })) ?? [];
+
   return (
     <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
-
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "stretch" }}>
-        <div style={{ flex: 1, borderRadius: 12, padding: "16px", background: "var(--bg-card)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)", marginBottom: 6 }}>Role context</div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>{banner}</div>
-          {isViewer && (
-            <button
-              onClick={() => window.print()}
-              style={{
-                marginTop: 12,
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                borderRadius: 999,
-                border: "1px solid var(--border)",
-                padding: "6px 12px",
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 1,
-                color: "var(--text-muted)",
-                background: "var(--bg-surface)",
-                cursor: "pointer",
-                width: "fit-content",
-              }}
-            >
-              <FileDown size={14} /> Export PDF
-            </button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2fr)", gap: 12, flex: 1 }}>
+          {dashLoading && (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "16px",
+                    minHeight: 88,
+                    animation: "pulse 1.5s ease-in-out infinite",
+                  }}
+                />
+              ))}
+            </>
           )}
+          {!dashLoading &&
+            [
+              {
+                label: "TOTAL BUDGET",
+                value: totals ? formatCr(totals.totalBudgetCr) : "—",
+                sub: dashboard?.financialYearLabel ? `FY ${dashboard.financialYearLabel}` : "Latest FY",
+                icon: <TrendingUp size={16} />,
+                accent: false,
+              },
+              {
+                label: "IFMS ACTUAL",
+                value: totals ? formatCr(totals.totalIfmsCr) : "—",
+                sub: totals ? `${utilPct}% utilised` : "—",
+                icon: <TrendingUp size={16} />,
+                accent: false,
+              },
+              {
+                label: "BALANCE (UNUTILISED)",
+                value: totals ? formatCr(totals.lapseRiskCr) : "—",
+                sub: totals ? `${lapsePct}% of budget` : "—",
+                icon: <AlertTriangle size={16} />,
+                accent: Boolean(totals && totals.lapseRiskCr > totals.totalBudgetCr * 0.4),
+              },
+              {
+                label: "OVERDUE ACTIONS",
+                value: dashboard ? String(dashboard.overdueActionsCount) : "—",
+                sub: `${dashboard?.criticalVerticalCount ?? 0} critical verticals`,
+                icon: <Clock size={16} />,
+                accent: Boolean(dashboard && dashboard.overdueActionsCount > 0),
+              },
+            ].map(({ label, value, sub, icon, accent }) => (
+              <div
+                key={label}
+                style={{
+                  background: "var(--bg-card)",
+                  border: `1px solid ${accent ? "var(--alert-critical)" : "var(--border)"}`,
+                  borderRadius: 8,
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <span style={{ color: accent ? "var(--alert-critical)" : "var(--text-muted)" }}>{icon}</span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: accent ? "var(--alert-critical)" : "var(--text-primary)",
+                    letterSpacing: -0.5,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {value}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{sub}</div>
+              </div>
+            ))}
         </div>
+
         <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)" }}>Pending my approval</div>
-          {approvalCards.map(card => (
+          <div
+            style={{
+              fontSize: 12,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              color: "var(--text-muted)",
+            }}
+          >
+            Pending my approval
+          </div>
+          {approvalCards.map((card) => (
             <ApprovalCard
               key={card.id}
               title={card.title}
@@ -154,131 +247,344 @@ export default function CommandCentre({ setActive }: Props) {
         </div>
       </div>
 
+      {dashError && (
+        <div
+          style={{
+            borderRadius: 8,
+            border: "1px solid var(--alert-warning)",
+            padding: "12px 14px",
+            fontSize: 13,
+            color: "var(--text-primary)",
+            background: "var(--bg-surface)",
+          }}
+        >
+          {dashError}
+        </div>
+      )}
 
-      {/* Top strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        {[
-          {
-            label: "TOTAL BUDGET", value: "₹9,882 Cr", sub: "FY 2025–26",
-            icon: <TrendingUp size={16} />, accent: false,
-          },
-          {
-            label: "IFMS ACTUAL", value: "₹4,797 Cr", sub: `${totalBudget.pct}% utilised`,
-            icon: <TrendingUp size={16} />, accent: false,
-          },
-          {
-            label: "LAPSE RISK", value: `₹${(9882.56 - 4796.84).toFixed(0)} Cr`, sub: `${lapseRisk}% balance with 11d left`,
-            icon: <AlertTriangle size={16} />, accent: true,
-          },
-          {
-            label: "OVERDUE ACTIONS", value: overdueActions.toString(), sub: `${criticalCount} critical verticals`,
-            icon: <Clock size={16} />, accent: true,
-          },
-        ].map(({ label, value, sub, icon, accent }) => (
-          <div key={label} style={{
-            background: "var(--bg-card)", border: `1px solid ${accent ? "var(--alert-critical)" : "var(--border)"}`,
-            borderRadius: 8, padding: "16px",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <span style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)" }}>{label}</span>
-              <span style={{ color: accent ? "var(--alert-critical)" : "var(--text-muted)" }}>{icon}</span>
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: accent ? "var(--alert-critical)" : "var(--text-primary)", letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Fiscal year burn-down bar */}
-      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, padding: "16px" }}>
+      {/* Fiscal year utilisation */}
+      <div
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: "16px",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)" }}>Fiscal Year Utilisation</span>
-          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{totalBudget.pct}% of ₹9,882 Cr</span>
+          <span
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              color: "var(--text-muted)",
+            }}
+          >
+            Fiscal year utilisation
+          </span>
+          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+            {totals ? `${utilPct}% of ${formatCr(totals.totalBudgetCr)}` : "—"}
+            {dashboard?.lastSnapshotDate ? ` · snapshots through ${dashboard.lastSnapshotDate}` : ""}
+          </span>
         </div>
         <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${totalBudget.pct}%`, background: "var(--text-primary)", borderRadius: 4, transition: "width 1s" }} />
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.min(100, totals?.utilisationPct ?? 0)}%`,
+              background: "var(--text-primary)",
+              borderRadius: 4,
+              transition: "width 1s",
+            }}
+          />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--text-muted)" }}>
-          <span>₹0</span><span>SO: ₹5,314 Cr</span><span>Target: ₹8,000 Cr</span><span>₹9,882 Cr</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: 6,
+            fontSize: 10,
+            color: "var(--text-muted)",
+          }}
+        >
+          <span>₹0</span>
+          <span>SO: {totals ? formatCr(totals.totalSoCr) : "—"}</span>
+          <span>{totals ? formatCr(totals.totalBudgetCr) : "—"} budget</span>
         </div>
       </div>
 
-      {/* Vertical grid + right panels */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
+      {/* IFMS trend */}
+      {ifmsChartData.length > 0 && (
+        <div
+          style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "16px",
+          }}
+        >
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)", marginBottom: 8 }}>
+            Department IFMS (₹ Cr) by snapshot date
+          </div>
+          <div style={{ height: 140 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={ifmsChartData}>
+                <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    fontSize: 11,
+                    color: "var(--text-primary)",
+                  }}
+                  formatter={(v) => [`${Number(v ?? 0)} Cr`, "IFMS"]}
+                />
+                <Area type="monotone" dataKey="ifms" stroke="var(--text-primary)" fill="var(--text-primary)" fillOpacity={0.12} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
-        {/* 12 vertical cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
         <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)", marginBottom: 10 }}>12 Programme Verticals</div>
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              color: "var(--text-muted)",
+              marginBottom: 10,
+            }}
+          >
+            Verticals (aggregated)
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {verticals.map(v => (
+            {(dashboard?.verticals ?? []).map((v) => (
               <button
                 key={v.id}
+                type="button"
                 onClick={() => setActive("schemes")}
                 style={{
-                  background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8,
-                  padding: "14px", cursor: "pointer", textAlign: "left", transition: "border-color 0.15s",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "14px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "border-color 0.15s",
                   borderTop: `3px solid ${statusColor(v.status)}`,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 18 }}>{v.icon}</span>
-                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: statusColor(v.status) }}>{statusLabel(v.status)}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{v.schemeCount} schemes</span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 600,
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      color: statusColor(v.status),
+                    }}
+                  >
+                    {statusLabel(v.status)}
+                  </span>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", marginBottom: 2, lineHeight: 1.3 }}>{v.name}</div>
-                <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 8 }}>{v.kpi}</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    marginBottom: 2,
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {v.name}
+                </div>
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 3 }}>
-                    <span style={{ color: "var(--text-muted)" }}>IFMS</span>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{v.pct}%</span>
+                    <span style={{ color: "var(--text-muted)" }}>IFMS / budget</span>
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {v.pct.toFixed(1)}%
+                    </span>
                   </div>
                   <div style={{ height: 4, background: "var(--border)", borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${Math.min(v.pct, 100)}%`, background: statusColor(v.status), borderRadius: 2 }} />
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(v.pct, 100)}%`,
+                        background: statusColor(v.status),
+                        borderRadius: 2,
+                      }}
+                    />
                   </div>
                 </div>
-                <SparkLine data={v.trend} />
+                <CommandCentreSparkLine data={pctTrendFromValue(v.pct)} />
               </button>
             ))}
           </div>
+
+          {dashboard && dashboard.topSchemes.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  color: "var(--text-muted)",
+                  marginBottom: 8,
+                }}
+              >
+                Top schemes by utilisation
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {dashboard.topSchemes.slice(0, 5).map((s) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 11,
+                      padding: "6px 8px",
+                      borderRadius: 6,
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{s.scheme}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
+                      {s.pct.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right panel */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* NBA top 3 */}
-          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)" }}>Top Recommendations</span>
-              <button onClick={() => setActive("agents")} style={{ fontSize: 10, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>
-                All <ArrowUpRight size={10} />
+          <AiAlertsCard />
+
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "14px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  color: "var(--text-muted)",
+                }}
+              >
+                Bottom schemes (utilisation)
+              </span>
+              <button
+                type="button"
+                onClick={() => router.push("/financial/schemes-board")}
+                style={{
+                  fontSize: 10,
+                  color: "var(--text-muted)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                Board <ArrowUpRight size={10} />
               </button>
             </div>
-            {nbaRecommendations.slice(0, 3).map(r => (
-              <div key={r.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                  <Zap size={12} style={{ color: r.priority === "critical" ? "var(--alert-critical)" : "var(--alert-warning)", flexShrink: 0, marginTop: 1 }} />
-                  <span style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.4 }}>{r.action.slice(0, 60)}…</span>
+            {(dashboard?.bottomSchemes ?? []).slice(0, 4).map((s) => (
+              <div
+                key={s.id}
+                style={{ marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}
+              >
+                <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.3, marginBottom: 3 }}>
+                  {s.scheme.length > 42 ? `${s.scheme.slice(0, 42)}…` : s.scheme}
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{r.officer}</span>
-                  <span style={{ fontSize: 10, color: "var(--alert-success)" }}>{r.impact}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{s.vertical}</span>
+                  <span style={{ fontSize: 10, color: "var(--alert-warning)", fontWeight: 600 }}>
+                    {s.pct.toFixed(1)}%
+                  </span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Overdue actions */}
-          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)" }}>Overdue Actions</span>
-              <button onClick={() => setActive("actions")} style={{ fontSize: 10, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>
-                All {overdueActions} <ArrowUpRight size={10} />
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "14px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  color: "var(--text-muted)",
+                }}
+              >
+                Overdue actions
+              </span>
+              <button
+                type="button"
+                onClick={() => setActive("actions")}
+                style={{
+                  fontSize: 10,
+                  color: "var(--text-muted)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                All {dashboard?.overdueActionsCount ?? 0} <ArrowUpRight size={10} />
               </button>
             </div>
-            {actionPoints.filter(a => a.status === "overdue").slice(0, 4).map(a => (
+            {(dashboard?.overdueActionsPreview ?? []).map((a) => (
               <div key={a.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.3, marginBottom: 3 }}>{a.title.slice(0, 50)}…</div>
+                <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.3, marginBottom: 3 }}>
+                  {a.title.length > 50 ? `${a.title.slice(0, 50)}…` : a.title}
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{a.officer}</span>
-                  <span style={{ fontSize: 10, color: "var(--alert-critical)", fontWeight: 600 }}>{a.daysOverdue}d overdue</span>
+                  <span style={{ fontSize: 10, color: "var(--alert-critical)", fontWeight: 600 }}>
+                    {a.daysOverdue}d overdue
+                  </span>
                 </div>
               </div>
             ))}

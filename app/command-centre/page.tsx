@@ -7,7 +7,7 @@ import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole } from "@/lib/auth";
 
 const ROUTE_MAP: Record<string, string> = {
-  schemes: "/financial",
+  schemes: "/financial/schemes-board",
   actions: "/action-items",
   agents: "/reports",
 };

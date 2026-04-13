@@ -23,7 +23,7 @@ export default function ApprovalCard({ title, description, count, href, owner, c
   const content = (
     <div
       className={clsx(
-        "rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm transition hover:border-[var(--border-strong)]",
+        "rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm transition hover:border-[var(--border-strong)]",
         className,
       )}
     >

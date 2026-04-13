@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import AiAlertsCard from "@/components/command-centre/AiAlertsCard";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import { fetchActionItems, updateActionItem } from "@/src/lib/services/actionItemService";
 import { ActionItem, ActionItemStatus } from "@/types";
@@ -30,6 +31,13 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
+function lastActivityMs(item: ActionItem): number {
+  if (item.updates?.length) {
+    return Math.max(...item.updates.map((u) => new Date(u.timestamp).getTime()));
+  }
+  return new Date(item.dueDate).getTime();
+}
+
 export default function ActionItemsPage() {
   const user = useRequireAuth();
   const [items, setItems] = useState<ActionItem[]>([]);
@@ -40,6 +48,11 @@ export default function ActionItemsPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [dueFilter, setDueFilter] = useState("all");
+  const [pageTab, setPageTab] = useState<"list" | "tracker">("list");
+  const [trackerActivity, setTrackerActivity] = useState<
+    "all" | "recent_7" | "recent_30" | "inactive_14" | "inactive_30"
+  >("all");
+  const [trackerStatus, setTrackerStatus] = useState<string>("all");
   const [reassignItem, setReassignItem] = useState<ActionItem | null>(null);
   const [reassignAssignee, setReassignAssignee] = useState("");
   const [reassignReviewer, setReassignReviewer] = useState("");
@@ -125,6 +138,21 @@ export default function ActionItemsPage() {
     });
   }, [roleFiltered, query, filter, verticalFilter, assigneeFilter, priorityFilter, dueFilter]);
 
+  const trackerFiltered = useMemo(() => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    return roleFiltered.filter((item) => {
+      if (trackerStatus !== "all" && item.status !== trackerStatus) return false;
+      const last = lastActivityMs(item);
+      const age = now - last;
+      if (trackerActivity === "recent_7") return age <= 7 * day;
+      if (trackerActivity === "recent_30") return age <= 30 * day;
+      if (trackerActivity === "inactive_14") return age > 14 * day;
+      if (trackerActivity === "inactive_30") return age > 30 * day;
+      return true;
+    });
+  }, [roleFiltered, trackerActivity, trackerStatus]);
+
   const stats = useMemo(() => {
     const total = roleFiltered.length;
     const overdue = roleFiltered.filter((item) => item.status === "OVERDUE").length;
@@ -164,6 +192,30 @@ export default function ActionItemsPage() {
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Follow up on critical directives, approvals, and escalations across HUDD schemes.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPageTab("list")}
+                className={`rounded-full border px-4 py-1.5 text-xs font-medium uppercase tracking-[0.2em] transition ${
+                  pageTab === "list"
+                    ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                    : "border-[var(--border)] text-[var(--text-muted)]"
+                }`}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setPageTab("tracker")}
+                className={`rounded-full border px-4 py-1.5 text-xs font-medium uppercase tracking-[0.2em] transition ${
+                  pageTab === "tracker"
+                    ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
+                    : "border-[var(--border)] text-[var(--text-muted)]"
+                }`}
+              >
+                Decision tracker
+              </button>
+            </div>
           </div>
           {user?.role === UserRole.TASU && (
             <Link
@@ -175,6 +227,38 @@ export default function ActionItemsPage() {
           )}
         </div>
 
+        {pageTab === "tracker" && (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+              <select
+                value={trackerActivity}
+                onChange={(e) => setTrackerActivity(e.target.value as typeof trackerActivity)}
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              >
+                <option value="all">All activity</option>
+                <option value="recent_7">Recent activity (7d)</option>
+                <option value="recent_30">Recent activity (30d)</option>
+                <option value="inactive_14">Inactive &gt; 14 days</option>
+                <option value="inactive_30">Inactive &gt; 30 days</option>
+              </select>
+              <select
+                value={trackerStatus}
+                onChange={(e) => setTrackerStatus(e.target.value)}
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              >
+                <option value="all">All statuses</option>
+                {(["OPEN", "IN_PROGRESS", "PROOF_UPLOADED", "UNDER_REVIEW", "COMPLETED", "OVERDUE"] as const).map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <AiAlertsCard />
+          </div>
+        )}
+
+        {pageTab === "list" && (
         <div className="flex flex-wrap items-center gap-2">
           {STATUS_FILTERS.map((entry) => (
             <button
@@ -189,7 +273,9 @@ export default function ActionItemsPage() {
             </button>
           ))}
         </div>
+        )}
 
+        {pageTab === "list" && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-muted)]">
           <input
             value={query}
@@ -241,8 +327,9 @@ export default function ActionItemsPage() {
             <option value="overdue">Overdue</option>
           </select>
         </div>
+        )}
 
-        {showStats && (
+        {pageTab === "list" && showStats && (
           <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] px-5 py-4 text-sm text-[var(--text-muted)]">
             <span>Total: <strong className="text-[var(--text-primary)]">{stats.total}</strong></span>
             <span>Overdue: <strong className="text-[var(--alert-critical)]">{stats.overdue}</strong></span>
@@ -257,13 +344,13 @@ export default function ActionItemsPage() {
           </div>
         )}
 
-        {!loading && filtered.length === 0 && (
+        {pageTab === "list" && !loading && filtered.length === 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-muted)]">
             No action items match your current filters.
           </div>
         )}
 
-        {!loading && filtered.length > 0 && (
+        {pageTab === "list" && !loading && filtered.length > 0 && (
           <div className="grid gap-4 md:grid-cols-2">
             {filtered.map((item) => {
               const currentStatus = item.status === "OVERDUE" ? "OPEN" : item.status;
@@ -344,6 +431,62 @@ export default function ActionItemsPage() {
                         <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Reject</button>
                       </>
                     )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {pageTab === "tracker" && !loading && trackerFiltered.length === 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-muted)]">
+            No items match the tracker filters.
+          </div>
+        )}
+
+        {pageTab === "tracker" && !loading && trackerFiltered.length > 0 && (
+          <div className="space-y-5">
+            {trackerFiltered.map((item) => {
+              const sorted = [...(item.updates ?? [])].sort(
+                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+              );
+              return (
+                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[var(--text-primary)]">{item.title}</h3>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        {item.vertical} · {item.schemeId} · Due {item.dueDate}
+                      </p>
+                    </div>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Status updates</p>
+                    {sorted.length === 0 ? (
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">No recorded updates yet.</p>
+                    ) : (
+                      <ul className="mt-3 space-y-3 border-l-2 border-[var(--border)] pl-4">
+                        {sorted.map((u, idx) => (
+                          <li key={u.id ?? `${item.id}-u-${idx}`} className="relative">
+                            <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-[var(--text-primary)]" />
+                            <p className="text-xs font-medium text-[var(--text-primary)]">
+                              {u.timestamp}
+                              {u.actor ? ` · ${u.actor}` : ""} · {u.status.replace(/_/g, " ")}
+                            </p>
+                            {u.note ? <p className="mt-1 text-sm text-[var(--text-muted)]">{u.note}</p> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="mt-4">
+                    <Link
+                      href={`/action-items/${item.id}`}
+                      className="text-xs font-medium text-[var(--text-primary)] underline underline-offset-2"
+                    >
+                      Open item
+                    </Link>
                   </div>
                 </div>
               );

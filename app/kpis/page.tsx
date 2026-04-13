@@ -5,11 +5,15 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import { fetchKPISubmissions, reviewKpiMeasurement } from "@/src/lib/services/kpiService";
+import { fetchFinancialBudgets } from "@/src/lib/services/financialService";
 import { KPISubmission } from "@/types";
+import type { FinancialEntry } from "@/types";
 import { UserRole } from "@/lib/auth";
 import StatusBadge from "@/src/components/ui/StatusBadge";
 import PendingBadge from "@/src/components/ui/PendingBadge";
 import ViewKpiModal from "@/components/kpis/ViewKpiModal";
+import { Search } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface TabConfig {
   id: string;
@@ -17,9 +21,33 @@ interface TabConfig {
   filter: (item: KPISubmission) => boolean;
 }
 
+function effBudgetEntry(e: FinancialEntry) {
+  return e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0);
+}
+
+function budgetUtilPct(e: FinancialEntry | undefined): number {
+  if (!e) return 0;
+  const b = effBudgetEntry(e);
+  if (!b || b <= 0) return 0;
+  return (e.ifms / b) * 100;
+}
+
+/** Rough progress score for aggregation (0–100); null if not computable. */
+function kpiProgressScore(s: KPISubmission): number | null {
+  if (s.type === "BINARY") return s.yes === true ? 100 : s.yes === false ? 0 : null;
+  const d = s.denominator ?? 0;
+  const n = s.numerator ?? 0;
+  if (d > 0) return Math.min(100, (n / d) * 100);
+  if (s.status === "approved") return 100;
+  return null;
+}
+
 export default function KPIsPage() {
   const user = useRequireAuth();
   const [submissions, setSubmissions] = useState<KPISubmission[]>([]);
+  const [financialEntries, setFinancialEntries] = useState<FinancialEntry[]>([]);
+  const [sidebarQuery, setSidebarQuery] = useState("");
+  const [focusScheme, setFocusScheme] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -30,9 +58,10 @@ export default function KPIsPage() {
     let active = true;
     const load = async () => {
       try {
-        const data = await fetchKPISubmissions();
+        const [data, fin] = await Promise.all([fetchKPISubmissions(), fetchFinancialBudgets().catch(() => ({ entries: [] }))]);
         if (!active) return;
         setSubmissions(data.submissions);
+        setFinancialEntries(fin.entries);
       } finally {
         if (active) setLoading(false);
       }
@@ -86,8 +115,8 @@ export default function KPIsPage() {
 
   const filtered = useMemo(() => {
     const tab = tabs.find((item) => item.id === activeTab) ?? tabs[0];
-    return submissions.filter(tab.filter);
-  }, [submissions, tabs, activeTab]);
+    return submissions.filter(tab.filter).filter((item) => !focusScheme || item.scheme === focusScheme);
+  }, [submissions, tabs, activeTab, focusScheme]);
 
   const summary = useMemo(() => {
     const total = submissions.length;
@@ -100,13 +129,110 @@ export default function KPIsPage() {
   const isViewer = user?.role === UserRole.VIEWER;
 
   const pendingQueue = useMemo(
-    () => submissions.filter((item) => item.status === "submitted_pending" && item.currentUserCanReview),
-    [submissions],
+    () =>
+      submissions.filter(
+        (item) =>
+          item.status === "submitted_pending" &&
+          item.currentUserCanReview &&
+          (!focusScheme || item.scheme === focusScheme),
+      ),
+    [submissions, focusScheme],
   );
+
+  const schemeNames = useMemo(() => {
+    const set = new Set(submissions.map((s) => s.scheme.trim()).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [submissions]);
+
+  const filteredSchemes = useMemo(() => {
+    const q = sidebarQuery.trim().toLowerCase();
+    if (!q) return schemeNames;
+    return schemeNames.filter((n) => n.toLowerCase().includes(q));
+  }, [schemeNames, sidebarQuery]);
+
+  const financialForFocus = useMemo(() => {
+    if (!focusScheme) return undefined;
+    return financialEntries.find((e) => e.scheme === focusScheme);
+  }, [financialEntries, focusScheme]);
+
+  const submissionsForFocus = useMemo(
+    () => (focusScheme ? submissions.filter((s) => s.scheme === focusScheme) : []),
+    [submissions, focusScheme],
+  );
+
+  const schemeAnalytics = useMemo(() => {
+    if (!focusScheme) return null;
+    const scores = submissionsForFocus.map(kpiProgressScore).filter((x): x is number => x != null);
+    const kpiAvg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    const budgetU = budgetUtilPct(financialForFocus);
+    const progressBuckets = { on_track: 0, delayed: 0, overdue: 0, none: 0 };
+    for (const s of submissionsForFocus) {
+      const st = s.measurementProgressStatus;
+      if (st === "on_track") progressBuckets.on_track += 1;
+      else if (st === "delayed") progressBuckets.delayed += 1;
+      else if (st === "overdue") progressBuckets.overdue += 1;
+      else progressBuckets.none += 1;
+    }
+    const vertical = submissionsForFocus[0]?.vertical ?? "—";
+    return { kpiAvg, budgetU, progressBuckets, vertical };
+  }, [focusScheme, submissionsForFocus, financialForFocus]);
+
+  const compareBarData = useMemo(() => {
+    if (!schemeAnalytics) return [];
+    return [
+      { name: "Budget utilisation", pct: schemeAnalytics.budgetU },
+      { name: "KPI progress (est.)", pct: schemeAnalytics.kpiAvg ?? 0 },
+    ];
+  }, [schemeAnalytics]);
 
   return (
     <AppShell title="KPI Tracker">
-      <div className="relative space-y-6 px-6 py-6">
+      <div className="flex h-[calc(100vh-64px)] min-h-0 overflow-hidden bg-[var(--bg-document)]">
+        <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-card)]">
+          <div className="border-b border-[var(--border)] p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Schemes</p>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text-muted)]" />
+              <input
+                value={sidebarQuery}
+                onChange={(e) => setSidebarQuery(e.target.value)}
+                placeholder="Search scheme..."
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-document)] py-2 pl-9 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+              />
+            </div>
+          </div>
+          <nav className="flex-1 overflow-y-auto p-2">
+            <button
+              type="button"
+              onClick={() => setFocusScheme(null)}
+              className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                focusScheme === null
+                  ? "border border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
+                  : "text-[var(--text-primary)] hover:bg-[var(--bg-content-surface)]"
+              }`}
+            >
+              <span className="font-medium">Full registry</span>
+              <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">All KPIs · table & reviews</span>
+            </button>
+            {filteredSchemes.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setFocusScheme(name)}
+                className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                  focusScheme === name
+                    ? "border border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
+                    : "text-[var(--text-primary)] hover:bg-[var(--bg-content-surface)]"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="relative min-w-0 flex-1 overflow-y-auto">
+          <div className="space-y-6 px-6 py-6">
         {isViewer && (
           <div className="pointer-events-none absolute right-6 top-4 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
             Read-only
@@ -116,8 +242,14 @@ export default function KPIsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">HUDD NEXUS</p>
-            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">KPI Performance Monitor</h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Latest outcome and output submissions across priority schemes.</p>
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
+              {focusScheme ? focusScheme : "KPI Performance Monitor"}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {focusScheme
+                ? `${schemeAnalytics?.vertical ?? "—"} · Budget utilisation vs estimated KPI progress.`
+                : "Latest outcome and output submissions across priority schemes."}
+            </p>
           </div>
           {user?.role === UserRole.NODAL_OFFICER && (
             <Link
@@ -130,18 +262,111 @@ export default function KPIsPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          {[
-            { label: "Total KPIs", value: summary.total },
-            { label: "Pending Review", value: summary.pending },
-            { label: "Approved", value: summary.approved },
-            { label: "Awaiting Entry", value: summary.awaiting },
-          ].map((card) => (
+          {(focusScheme
+            ? [
+                { label: "KPIs (this scheme)", value: submissionsForFocus.length },
+                {
+                  label: "Pending Review",
+                  value: submissionsForFocus.filter((s) => s.status === "submitted_pending").length,
+                },
+                { label: "Approved", value: submissionsForFocus.filter((s) => s.status === "approved").length },
+                {
+                  label: "Awaiting Entry",
+                  value: submissionsForFocus.filter((s) => s.status === "not_submitted" || s.status === "draft").length,
+                },
+              ]
+            : [
+                { label: "Total KPIs", value: summary.total },
+                { label: "Pending Review", value: summary.pending },
+                { label: "Approved", value: summary.approved },
+                { label: "Awaiting Entry", value: summary.awaiting },
+              ]
+          ).map((card) => (
             <div key={card.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
               <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">{card.label}</p>
               <p className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">{card.value}</p>
             </div>
           ))}
         </div>
+
+        {focusScheme && schemeAnalytics && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                Budget utilisation vs KPI progress
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Budget from finance snapshots (effective budget vs IFMS). KPI progress is an average of measurable submissions
+                (numeric targets or approved).
+              </p>
+              <div className="mt-4 h-52 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={compareBarData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                    <Tooltip
+                      formatter={(v) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
+                      contentStyle={{
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend />
+                    <Bar dataKey="pct" name="%" fill="var(--text-primary)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)]">
+                <div>
+                  <span className="text-[var(--text-muted)]">IFMS utilisation</span>
+                  <p className="font-semibold tabular-nums text-[var(--text-primary)]">
+                    {schemeAnalytics.budgetU.toFixed(1)}%
+                    {!financialForFocus && (
+                      <span className="ml-1 font-normal text-[var(--text-muted)]">(no finance row)</span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[var(--text-muted)]">Avg. KPI score (est.)</span>
+                  <p className="font-semibold tabular-nums text-[var(--text-primary)]">
+                    {schemeAnalytics.kpiAvg != null ? `${schemeAnalytics.kpiAvg.toFixed(1)}%` : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Measurement pace</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Latest measurement status across KPIs for this scheme.</p>
+              <div className="mt-6 space-y-3">
+                {(
+                  [
+                    ["on_track", "On track", schemeAnalytics.progressBuckets.on_track],
+                    ["delayed", "Delayed", schemeAnalytics.progressBuckets.delayed],
+                    ["overdue", "Overdue", schemeAnalytics.progressBuckets.overdue],
+                    ["none", "Not set", schemeAnalytics.progressBuckets.none],
+                  ] as const
+                ).map(([key, label, count]) => (
+                  <div key={key}>
+                    <div className="mb-1 flex justify-between text-xs">
+                      <span className="text-[var(--text-primary)]">{label}</span>
+                      <span className="tabular-nums text-[var(--text-muted)]">{count}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--border)]">
+                      <div
+                        className="h-full rounded-full bg-[var(--text-primary)]"
+                        style={{
+                          width: `${submissionsForFocus.length ? (count / submissionsForFocus.length) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           {tabs.map((tab) => (
@@ -156,7 +381,17 @@ export default function KPIsPage() {
               {tab.label}
             </button>
           ))}
-          {summary.pending > 0 && <PendingBadge count={summary.pending} />}
+          {(focusScheme
+            ? submissionsForFocus.filter((s) => s.status === "submitted_pending").length
+            : summary.pending) > 0 && (
+            <PendingBadge
+              count={
+                focusScheme
+                  ? submissionsForFocus.filter((s) => s.status === "submitted_pending").length
+                  : summary.pending
+              }
+            />
+          )}
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
@@ -302,6 +537,8 @@ export default function KPIsPage() {
               </table>
             </div>
           )}
+        </div>
+          </div>
         </div>
       </div>
 

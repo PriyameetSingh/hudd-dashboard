@@ -6,7 +6,7 @@ import { UserRole, getCurrentUser, type MockUser } from "@/lib/auth";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
 import type { ActionItem, KPISubmission } from "@/types";
-import { LayoutDashboard, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
 
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -103,6 +103,12 @@ const items: NavItem[] = [
     icon: IndianRupee,
     roles: Object.values(UserRole),
     children: [
+      {
+        label: "Utilisation board",
+        href: "/financial/schemes-board",
+        icon: LayoutGrid,
+        roles: Object.values(UserRole),
+      },
       {
         label: "Scheme Entry",
         href: "/financial/entry/scheme",
