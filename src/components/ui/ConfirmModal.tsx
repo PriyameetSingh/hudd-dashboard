@@ -32,7 +32,7 @@ export default function ConfirmModal({
         <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
         {message && <p className="mt-2 text-sm text-[var(--text-muted)]">{message}</p>}
         <div className="mt-6 flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
           <Button
