@@ -188,7 +188,7 @@ export default function SchemesPage() {
                         )}
                       </tr>
                       {open && (
-                        <tr className="border-t border-[var(--border)] bg-[var(--bg-card)]">
+                        <tr className="border-t border-[var(--border)] bg-[var(--bg-card)]" style={{ backgroundColor: 'var(--bg-card) !important' }}>
                           <td colSpan={canManageSchemes ? 10 : 9} className="px-6 py-4">
                             <div className="grid gap-6 lg:grid-cols-3">
                               <div>

@@ -109,6 +109,27 @@ const STATUS_COLORS: Record<string, string> = {
   not_started: "#95a5a6",
 };
 
+/** IFMS vs effective budget — same basis as main-panel utilisation; used for sidebar bars. */
+function getSubschemeBudgetProgress(sub: {
+  ifms?: number;
+  effectiveBudgetCr?: number;
+  annualBudget?: number;
+}): { fillPct: number; color: string } {
+  const eff = sub.effectiveBudgetCr ?? sub.annualBudget ?? 0;
+  const ifms = sub.ifms ?? 0;
+  if (eff <= 0) {
+    return { fillPct: 0, color: "#95a5a6" };
+  }
+  const ratio = ifms / eff;
+  const fillPct = Math.min(100, ratio * 100);
+  let color: string;
+  if (ratio > 1) color = "#e74c3c";
+  else if (ratio >= 0.85) color = "#f39c12";
+  else if (ratio >= 0.5) color = "#2ecc71";
+  else color = "#3498db";
+  return { fillPct, color };
+}
+
 export default function SchemeEntryPage() {
   useRequireRole([UserRole.FA], "/");
 
@@ -416,10 +437,6 @@ export default function SchemeEntryPage() {
       triggerAlert("error", "Enter a valid positive budget amount.");
       return;
     }
-    if (!reviseBudgetReason.trim()) {
-      triggerAlert("error", "Reason is required.");
-      return;
-    }
     setIsSubmitting(true);
     setPendingSubmit("revise");
     try {
@@ -428,7 +445,7 @@ export default function SchemeEntryPage() {
         subschemeCode: hasSubschemes ? selectedSubschemeCode : null,
         financialYearLabel,
         newBudgetCr: Number(reviseBudgetAmount),
-        reason: reviseBudgetReason
+        reason: reviseBudgetReason.trim()
       });
       setRevisingBudget(false);
       setReviseBudgetAmount("");
@@ -555,6 +572,7 @@ export default function SchemeEntryPage() {
                     <div className="ml-4 pl-3 border-l-2 border-[var(--accent)] space-y-1">
                       {entry.subschemes?.map(sub => {
                         const isActiveSub = sub.code === selectedSubschemeCode;
+                        const progress = getSubschemeBudgetProgress(sub);
                         return (
                           <button
                             key={sub.code}
@@ -563,6 +581,18 @@ export default function SchemeEntryPage() {
                           >
                             <span className="block font-semibold">{sub.code}</span>
                             <span className="block truncate opacity-80">{sub.name}</span>
+                            <div
+                              className="mt-1.5 h-1 w-full rounded-full bg-[var(--border)] overflow-hidden"
+                              aria-hidden
+                            >
+                              <div
+                                className="h-full rounded-full min-w-0 transition-[width] duration-200"
+                                style={{
+                                  width: `${progress.fillPct}%`,
+                                  backgroundColor: progress.color,
+                                }}
+                              />
+                            </div>
                           </button>
                         );
                       })}
@@ -604,7 +634,7 @@ export default function SchemeEntryPage() {
                           <button
                             key={sub.code}
                             onClick={() => applySubscheme(sub.code, selected)}
-                            className={`px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider transition ${sub.code === selectedSubschemeCode ? 'bg-[var(--text-primary)] text-black' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
+                            className={`px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider transition ${sub.code === selectedSubschemeCode ? 'bg-[var(--bg-hover)] text-black' : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)]'}`}
                           >
                             {sub.code}
                           </button>
@@ -651,7 +681,7 @@ export default function SchemeEntryPage() {
                             <input type="number" step="0.01" min="0" placeholder="New Budget (₹ Cr)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetAmount} onChange={e => setReviseBudgetAmount(e.target.value ? Number(e.target.value) : "")} />
                           </div>
                           <div className="flex-[2]">
-                            <input type="text" placeholder="Reason (Required)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetReason} onChange={e => setReviseBudgetReason(e.target.value)} />
+                            <input type="text" placeholder="Reason (optional)" className="w-full text-sm p-2 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-md" value={reviseBudgetReason} onChange={e => setReviseBudgetReason(e.target.value)} />
                           </div>
                           <button
                             type="button"

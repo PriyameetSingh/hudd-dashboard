@@ -95,7 +95,6 @@ const items: NavItem[] = [
     href: "/command-centre",
     icon: LayoutDashboard,
     roles: [UserRole.ACS, UserRole.PS_HUDD, UserRole.AS, UserRole.VIEWER],
-    badge: "read-only",
   },
   {
     label: "Financial Overview",

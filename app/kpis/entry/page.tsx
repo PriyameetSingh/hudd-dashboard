@@ -1,12 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole } from "@/lib/auth";
 import { fetchKPISubmissions, submitKPIMeasurement } from "@/src/lib/services/kpiService";
 import { KPISubmission } from "@/types";
 import StatusBadge from "@/src/components/ui/StatusBadge";
+
+function formatKpiPercentage(
+  numerator: number | "" | undefined,
+  denominator: number | null | undefined,
+): string | null {
+  const den = denominator == null ? NaN : Number(denominator);
+  if (!Number.isFinite(den) || den === 0) return null;
+  if (numerator === "" || numerator === undefined) return null;
+  const num = Number(numerator);
+  if (!Number.isFinite(num)) return null;
+  return ((num / den) * 100).toFixed(1);
+}
 
 interface RowState {
   saving?: boolean;
@@ -25,6 +39,7 @@ export default function KPIEntryPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expandedSchemes, setExpandedSchemes] = useState<Record<string, boolean>>({});
+  const [sidebarQuery, setSidebarQuery] = useState("");
 
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [binaryResponses, setBinaryResponses] = useState<Record<string, boolean | null>>({});
@@ -71,16 +86,55 @@ export default function KPIEntryPage() {
     }));
   }, [submissions]);
 
-  // Auto-expand all schemes and select first KPI when data loads
+  const filteredGrouped = useMemo(() => {
+    const q = sidebarQuery.trim().toLowerCase();
+    if (!q) return grouped;
+    return grouped
+      .map(({ scheme, items }) => ({
+        scheme,
+        items: items.filter(
+          (item) =>
+            item.description.toLowerCase().includes(q) ||
+            scheme.toLowerCase().includes(q) ||
+            item.vertical.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [grouped, sidebarQuery]);
+
+  // Auto-expand schemes and select first KPI when data loads
   useEffect(() => {
     if (grouped.length === 0) return;
     const expanded: Record<string, boolean> = {};
-    grouped.forEach(({ scheme }) => { expanded[scheme] = true; });
+    grouped.forEach(({ scheme }) => {
+      expanded[scheme] = true;
+    });
     setExpandedSchemes(expanded);
     if (!selectedId && grouped[0]?.items[0]) {
       setSelectedId(grouped[0].items[0].id);
     }
   }, [grouped, selectedId]);
+
+  // Keep selection valid when filtering the sidebar
+  useEffect(() => {
+    if (filteredGrouped.length === 0) return;
+    const visibleIds = new Set(filteredGrouped.flatMap((g) => g.items.map((i) => i.id)));
+    if (selectedId && !visibleIds.has(selectedId)) {
+      setSelectedId(filteredGrouped[0].items[0]?.id ?? null);
+    }
+  }, [filteredGrouped, selectedId]);
+
+  // When searching, expand all groups that still have matches
+  useEffect(() => {
+    if (!sidebarQuery.trim()) return;
+    setExpandedSchemes((prev) => {
+      const next = { ...prev };
+      filteredGrouped.forEach(({ scheme }) => {
+        next[scheme] = true;
+      });
+      return next;
+    });
+  }, [sidebarQuery, filteredGrouped]);
 
   const selectedItem = useMemo(
     () => submissions.find((s) => s.id === selectedId) ?? null,
@@ -166,16 +220,40 @@ export default function KPIEntryPage() {
     <AppShell title="KPI Entry">
       <div className="flex h-[calc(100vh-56px)] overflow-hidden">
         {/* ── Left sidebar ── */}
-        <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-card)] overflow-y-auto">
-          <div className="border-b border-[var(--border)] px-4 py-4">
-            <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--text-muted)]">KPI Entry</p>
-            <p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+        <aside className="flex w-[min(100%,20rem)] shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)]">
+          <div className="border-b border-[var(--border)] px-4 py-3">
+            <Link
+              href="/kpis"
+              className="text-[11px] font-medium text-[var(--accent)] hover:underline"
+            >
+              ← All KPIs
+            </Link>
+            <p className="mt-3 text-[10px] uppercase tracking-[0.35em] text-[var(--text-muted)]">
+              Data entry
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--text-primary)] tabular-nums">
               {financialYearLabel ?? "—"}
             </p>
             {!loading && (
               <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                {completion.submitted} / {completion.total} submitted
+                {completion.submitted} of {completion.total} submitted
               </p>
+            )}
+            {!loading && grouped.length > 0 && (
+              <div className="relative mt-3">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]"
+                  aria-hidden
+                />
+                <input
+                  type="search"
+                  value={sidebarQuery}
+                  onChange={(e) => setSidebarQuery(e.target.value)}
+                  placeholder="Filter KPIs…"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] py-2 pl-8 pr-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  autoComplete="off"
+                />
+              </div>
             )}
           </div>
 
@@ -188,37 +266,43 @@ export default function KPIEntryPage() {
           {!loading && grouped.length === 0 && (
             <div className="px-4 py-6 text-xs text-[var(--text-muted)]">No KPIs assigned.</div>
           )}
+          {!loading && grouped.length > 0 && filteredGrouped.length === 0 && (
+            <div className="px-4 py-6 text-xs text-[var(--text-muted)]">No KPIs match your filter.</div>
+          )}
 
           <nav className="flex-1 py-2">
-            {grouped.map(({ scheme, items }) => (
+            {filteredGrouped.map(({ scheme, items }) => (
               <div key={scheme}>
-                {/* Scheme header */}
                 <button
-                  className="flex w-full items-center justify-between px-4 py-2 text-left text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  type="button"
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                   onClick={() => toggleScheme(scheme)}
                 >
-                  <span className="truncate">{scheme}</span>
-                  <span className="ml-2 shrink-0 text-[10px]">
-                    {expandedSchemes[scheme] ? "▲" : "▼"}
-                  </span>
+                  {expandedSchemes[scheme] ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{scheme}</span>
+                  <span className="shrink-0 tabular-nums text-[10px] opacity-70">{items.length}</span>
                 </button>
 
-                {/* KPI list under scheme */}
                 {expandedSchemes[scheme] && (
-                  <ul>
+                  <ul className="pb-1">
                     {items.map((item) => (
                       <li key={item.id}>
                         <button
+                          type="button"
                           onClick={() => setSelectedId(item.id)}
-                          className={`flex w-full items-start gap-2 px-4 py-2 text-left transition ${selectedId === item.id
-                            ? "bg-[var(--bg-content-surface)] border border-[var(--accent)] shadow-sm"
-                            : "hover:bg-[var(--bg-content-surface)] hover:border-l-2 hover:border-[var(--border)]"
+                          className={`flex w-full items-start gap-2 border-l-2 px-4 py-2 pl-[1.35rem] text-left transition ${selectedId === item.id
+                            ? "border-[var(--accent)] bg-[var(--bg-content-surface)]"
+                            : "border-transparent hover:border-[var(--border)] hover:bg-[var(--bg-content-surface)]"
                             }`}
                         >
                           <span
                             className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(item.status)}`}
                           />
-                          <span className="text-xs leading-snug text-[var(--text-primary)]">
+                          <span className="min-w-0 text-xs leading-snug text-[var(--text-primary)]">
                             {item.description}
                           </span>
                         </button>
@@ -232,10 +316,10 @@ export default function KPIEntryPage() {
         </aside>
 
         {/* ── Main detail panel ── */}
-        <main className="flex-1 overflow-y-auto bg-[var(--bg-primary)] px-8 py-8">
+        <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--bg-primary)] px-5 py-6 sm:px-8 sm:py-8">
           {!selectedItem && !loading && (
-            <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
-              Select a KPI from the sidebar to enter data.
+            <div className="flex h-full min-h-[40vh] items-center justify-center px-4 text-center text-sm text-[var(--text-muted)]">
+              Select a KPI from the list to enter or review values.
             </div>
           )}
 
@@ -245,10 +329,9 @@ export default function KPIEntryPage() {
             const binaryValue = binaryResponses[item.id] ?? item.yes ?? null;
             const numVal = numeratorById[item.id];
             const denVal = item.denominator;
-            const computed =
-              numVal !== "" && numVal != null && denVal != null && denVal !== 0
-                ? (((Number(numVal) / denVal) * 100).toFixed(1))
-                : null;
+            const computedPct = formatKpiPercentage(numVal, denVal);
+            const pctBarWidth =
+              computedPct != null ? Math.min(100, Math.max(0, Number(computedPct))) : null;
 
             const isApproved = item.status === "approved";
             const approvedNum = item.numerator;
@@ -256,14 +339,13 @@ export default function KPIEntryPage() {
               item.type !== "BINARY" ? getValidationError(item, numVal ?? "") : null;
 
             return (
-              <div className="mx-auto max-w-2xl space-y-6">
-                {/* Header */}
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--text-muted)]">
+              <div className="mx-auto max-w-3xl space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] pb-5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-[var(--text-muted)]">
                       {item.scheme} · {item.vertical}
                     </p>
-                    <h2 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">
+                    <h2 className="mt-1.5 text-lg font-semibold leading-snug text-[var(--text-primary)] sm:text-xl">
                       {item.description}
                     </h2>
                     {(item.assignedToName || item.reviewerName) && (
@@ -281,19 +363,21 @@ export default function KPIEntryPage() {
                         )}
                       </p>
                     )}
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-1">
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
                         {item.type}
                       </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-1">
+                      <span className="rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
                         {item.category}
                       </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-1">
-                        {item.unit}
+                      <span className="rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                        Unit: {item.unit}
                       </span>
                     </div>
                   </div>
-                  <StatusBadge status={item.status} />
+                  <div className="shrink-0">
+                    <StatusBadge status={item.status} />
+                  </div>
                 </div>
 
                 {/* Approved-decrease warning */}
@@ -309,12 +393,15 @@ export default function KPIEntryPage() {
                   </div>
                 )}
 
-                {/* Entry form */}
-                <div className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 ${!canEditSelected ? "pointer-events-none opacity-50" : ""}`}>
+                <div
+                  className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm sm:p-6 ${!canEditSelected ? "pointer-events-none opacity-50" : ""}`}
+                >
                   {item.type === "BINARY" ? (
                     <div className="space-y-4">
-                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Response</p>
-                      <div className="flex gap-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.25em] text-[var(--text-muted)]">
+                        Response
+                      </p>
+                      <div className="flex flex-wrap gap-3">
                         <button
                           className={`rounded-xl border px-6 py-2.5 text-xs uppercase tracking-[0.3em] transition ${binaryValue === true
                             ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]"
@@ -336,25 +423,24 @@ export default function KPIEntryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="grid gap-5 sm:grid-cols-3">
-                      {/* Numerator */}
+                    <div className="grid gap-4 sm:grid-cols-3 sm:gap-5">
                       <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                        <label className="text-[10px] font-medium uppercase tracking-[0.25em] text-[var(--text-muted)]">
                           Numerator
                         </label>
                         <input
                           type="number"
+                          inputMode="decimal"
                           value={numeratorById[item.id] ?? ""}
                           min={isApproved && approvedNum != null ? approvedNum : undefined}
                           onChange={(e) => {
                             const val = e.target.value === "" ? "" : Number(e.target.value);
                             setNumeratorById((prev) => ({ ...prev, [item.id]: val }));
-                            // clear error on change
                             if (rowState[item.id]?.error) {
                               setRowState((prev) => ({ ...prev, [item.id]: {} }));
                             }
                           }}
-                          className={`w-full rounded-xl border px-4 py-2.5 text-sm text-[var(--text-primary)] bg-[var(--bg-card)] focus:outline-none focus:ring-1 ${validationError
+                          className={`w-full rounded-xl border px-4 py-2.5 text-sm tabular-nums text-[var(--text-primary)] bg-[var(--bg-card)] focus:outline-none focus:ring-1 ${validationError
                             ? "border-[var(--alert-critical)] focus:ring-[var(--alert-critical)]"
                             : "border-[var(--border)] focus:ring-[var(--text-primary)]"
                             }`}
@@ -364,41 +450,49 @@ export default function KPIEntryPage() {
                         )}
                       </div>
 
-                      {/* Denominator — always read-only */}
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                        <label className="text-[10px] font-medium uppercase tracking-[0.25em] text-[var(--text-muted)]">
                           Denominator
-                          {/* <span className="rounded px-1.5 py-0.5 text-[8px] bg-[var(--bg-surface)] border border-[var(--border)]">
-                            Read-only
-                          </span> */}
                         </label>
                         <input
                           type="number"
                           value={denVal ?? ""}
                           readOnly
-                          disabled
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed"
+                          tabIndex={-1}
+                          className="w-full cursor-default rounded-xl border border-[var(--border)] bg-[var(--bg-content-surface)] px-4 py-2.5 text-sm tabular-nums text-[var(--text-secondary)]"
                         />
                       </div>
+
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                          Percentage{" "}
+                        <label className="text-[10px] font-medium uppercase tracking-[0.25em] text-[var(--text-muted)]">
+                          Percentage
                         </label>
-                        <input type="number" value={computed != null ? `${computed}%` : "—"} readOnly disabled className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm text-[var(--text-muted)] opacity-60 cursor-not-allowed" />
+                        <div
+                          className="flex min-h-[42px] w-full items-center rounded-xl border border-[var(--border)] bg-[var(--bg-content-surface)] px-4 py-2.5 text-sm tabular-nums text-[var(--text-primary)]"
+                          role="status"
+                          aria-live="polite"
+                          aria-label={
+                            computedPct != null
+                              ? `Calculated percentage ${computedPct} percent`
+                              : "Percentage not available"
+                          }
+                        >
+                          {computedPct != null ? `${computedPct}%` : "—"}
+                        </div>
+                        {pctBarWidth != null && (
+                          <div
+                            className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--border)]/70"
+                            aria-hidden
+                          >
+                            <div
+                              className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-150"
+                              style={{ width: `${pctBarWidth}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
-
-                  {/* Computed % row */}
-                  {/* {item.type !== "BINARY" && computed != null && (
-                    <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-xs text-[var(--text-muted)]">
-                      Computed:{" "}
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        {Number(numeratorById[item.id]) ?? 0} / {denVal ?? 0} ={" "}
-                        {computed}%
-                      </span>
-                    </div>
-                  )} */}
 
                   {/* Remarks */}
                   <div className="mt-5 space-y-2">

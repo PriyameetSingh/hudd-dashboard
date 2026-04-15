@@ -453,7 +453,7 @@ export default function CommandCentre({ setActive }: Props) {
                       fontSize: 11,
                       padding: "6px 8px",
                       borderRadius: 6,
-                      background: "var(--bg-surface)",
+                      background: "var(--bg-card)",
                       border: "1px solid var(--border)",
                     }}
                   >
