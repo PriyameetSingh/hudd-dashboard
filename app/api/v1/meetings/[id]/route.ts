@@ -18,6 +18,10 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
           select: { id: true, title: true, status: true, dueDate: true },
         },
         createdBy: { select: { name: true } },
+        materials: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+        },
       },
     });
 
@@ -34,6 +38,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
         createdByName: meeting.createdBy?.name ?? null,
         topics: meeting.topics.map((t) => ({ id: t.id, topic: t.topic })),
         actionItems: meeting.actionItems,
+        materials: meeting.materials,
       },
     });
   } catch (error) {

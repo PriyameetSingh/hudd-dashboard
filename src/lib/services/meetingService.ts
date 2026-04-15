@@ -6,6 +6,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type MeetingMaterialMeta = {
+  id: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+};
+
 export type MeetingListItem = {
   id: string;
   meetingDate: string;
@@ -14,6 +21,7 @@ export type MeetingListItem = {
   createdByName: string | null;
   topics: Array<{ id: string; topic: string }>;
   actionItems: Array<{ id: string; title: string; status: string }>;
+  materials: MeetingMaterialMeta[];
 };
 
 export async function fetchMeetings(): Promise<MeetingListItem[]> {
@@ -35,6 +43,35 @@ export async function createMeeting(input: {
     body: JSON.stringify(input),
   });
   return parseResponse<{ id: string }>(response);
+}
+
+export async function uploadMeetingMaterial(
+  meetingId: string,
+  file: File,
+): Promise<{ material: MeetingMaterialMeta }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/v1/meetings/${meetingId}/materials`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseResponse<{ material: MeetingMaterialMeta }>(response);
+}
+
+export async function getMeetingMaterialSignedUrl(
+  meetingId: string,
+  materialId: string,
+): Promise<{
+  url: string;
+  expiresIn: number;
+  fileName: string;
+  mimeType: string | null;
+}> {
+  const response = await fetch(
+    `/api/v1/meetings/${meetingId}/materials/${materialId}/signed-url`,
+    { cache: "no-store" },
+  );
+  return parseResponse(response);
 }
 
 export async function updateMeeting(

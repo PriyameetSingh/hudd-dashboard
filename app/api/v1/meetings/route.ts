@@ -15,6 +15,10 @@ export async function GET() {
         topics: { orderBy: { createdAt: "asc" } },
         actionItems: { select: { id: true, title: true, status: true } },
         createdBy: { select: { name: true } },
+        materials: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
+        },
       },
     });
 
@@ -27,6 +31,7 @@ export async function GET() {
         createdByName: m.createdBy?.name ?? null,
         topics: m.topics.map((t) => ({ id: t.id, topic: t.topic })),
         actionItems: m.actionItems,
+        materials: m.materials,
       })),
     });
   } catch (error) {

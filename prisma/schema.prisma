@@ -126,6 +126,7 @@ model User {
   reviewedKpiMeasurements KpiMeasurement[]     @relation("KpiMeasurementReviewedBy")
   createdMeetings       DashboardMeeting[]     @relation("MeetingCreatedBy")
   createdMeetingTopics  MeetingTopic[]         @relation("MeetingTopicCreatedBy")
+  uploadedMeetingMaterials MeetingMaterial[]   @relation("MeetingMaterialUploadedBy")
   createdActionItems    ActionItem[]           @relation("ActionItemCreatedBy")
   assignedActionItems   ActionItem[]           @relation("ActionItemAssignedTo")
   reviewedActionItems   ActionItem[]           @relation("ActionItemReviewedBy")
@@ -475,6 +476,7 @@ model DashboardMeeting {
 
   topics     MeetingTopic[]
   actionItems ActionItem[]
+  materials  MeetingMaterial[]
 
   @@map("dashboard_meetings")
 }
@@ -490,6 +492,24 @@ model MeetingTopic {
   createdBy User?            @relation("MeetingTopicCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("meeting_topics")
+}
+
+model MeetingMaterial {
+  id          String   @id @default(uuid()) @db.Uuid
+  meetingId   String   @db.Uuid
+  storagePath String   @unique
+  fileName    String
+  mimeType    String?
+  sizeBytes   Int?
+  sortOrder   Int      @default(0)
+  uploadedById String? @db.Uuid
+  createdAt   DateTime @default(now())
+
+  meeting    DashboardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  uploadedBy User?            @relation("MeetingMaterialUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([meetingId])
+  @@map("meeting_materials")
 }
 
 model ActionItem {

@@ -1,0 +1,53 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { createSupabaseAdmin, isSupabaseConfigured, MEETING_MATERIALS_BUCKET } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
+
+export async function DELETE(
+  _request: NextRequest,
+  ctx: { params: Promise<{ id: string; materialId: string }> },
+) {
+  try {
+    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+
+    const { id: meetingId, materialId } = await ctx.params;
+
+    const row = await prisma.meetingMaterial.findFirst({
+      where: { id: materialId, meetingId },
+    });
+    if (!row) {
+      return NextResponse.json({ detail: "Material not found" }, { status: 404 });
+    }
+
+    if (isSupabaseConfigured()) {
+      const supabase = createSupabaseAdmin();
+      await supabase.storage.from(MEETING_MATERIALS_BUCKET).remove([row.storagePath]);
+    }
+
+    await prisma.meetingMaterial.delete({ where: { id: materialId } });
+
+    const actor = await getDbUserBySession();
+    const auditContext = getAuditRequestContext(_request);
+
+    await logAudit(
+      actor?.id,
+      "meeting.material.delete",
+      "meeting_material",
+      materialId,
+      { id: materialId, storagePath: row.storagePath },
+      null,
+      { ...auditContext, meetingId },
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const auth = toAuthErrorResponse(error);
+    if (auth) {
+      return NextResponse.json({ detail: auth.detail }, { status: auth.status });
+    }
+    throw error;
+  }
+}
