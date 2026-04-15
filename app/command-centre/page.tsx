@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import CommandCentre from "@/components/CommandCentre";
-import { useRequireRole } from "@/src/lib/route-guards";
-import { UserRole } from "@/lib/auth";
+import { useRequireAuth } from "@/src/lib/route-guards";
 
 const ROUTE_MAP: Record<string, string> = {
   schemes: "/financial/schemes-board",
@@ -13,7 +12,7 @@ const ROUTE_MAP: Record<string, string> = {
 };
 
 export default function CommandCentrePage() {
-  useRequireRole([UserRole.ACS, UserRole.PS_HUDD, UserRole.AS, UserRole.VIEWER], "/dashboard");
+  useRequireAuth();
   const router = useRouter();
 
   const handleActive = (id: string) => {
@@ -22,7 +21,7 @@ export default function CommandCentrePage() {
   };
 
   return (
-    <AppShell title="Command Centre">
+    <AppShell title="Dashboard">
       <CommandCentre setActive={handleActive} />
     </AppShell>
   );

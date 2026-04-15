@@ -91,10 +91,10 @@ type NavItem = {
 
 const items: NavItem[] = [
   {
-    label: "Command Centre",
+    label: "Dashboard",
     href: "/command-centre",
     icon: LayoutDashboard,
-    roles: [UserRole.ACS, UserRole.PS_HUDD, UserRole.AS, UserRole.VIEWER],
+    roles: Object.values(UserRole),
   },
   {
     label: "Financial Overview",

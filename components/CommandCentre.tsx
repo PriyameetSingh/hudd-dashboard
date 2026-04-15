@@ -441,7 +441,7 @@ export default function CommandCentre({ setActive }: Props) {
                   marginBottom: 8,
                 }}
               >
-                Top schemes by utilisation
+                Top schemes by budget utilisation
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {dashboard.topSchemes.slice(0, 5).map((s) => (
@@ -495,7 +495,7 @@ export default function CommandCentre({ setActive }: Props) {
                   color: "var(--text-muted)",
                 }}
               >
-                Bottom schemes (utilisation)
+                Underperforming Schemes (financial Progress)
               </span>
               <button
                 type="button"

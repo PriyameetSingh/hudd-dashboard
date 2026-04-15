@@ -4,16 +4,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser, UserRole } from "@/lib/auth";
 
-const ROUTES: Record<UserRole, string> = {
-  [UserRole.ACS]: "/command-centre",
-  [UserRole.PS_HUDD]: "/command-centre",
-  [UserRole.AS]: "/command-centre",
-  [UserRole.VIEWER]: "/command-centre",
-  [UserRole.FA]: "/financial/entry",
-  [UserRole.NODAL_OFFICER]: "/kpis/entry",
-  [UserRole.TASU]: "/action-items",
-  [UserRole.DIRECTOR]: "/kpis",
-};
+/** Post-login home: same dashboard for every role; approval/action cards vary per user (role-based summaries). */
+const DASHBOARD_PATH = "/command-centre";
+
+const ROUTES = Object.fromEntries(
+  (Object.values(UserRole) as UserRole[]).map((role) => [role, DASHBOARD_PATH]),
+) as Record<UserRole, string>;
 
 export default function DashboardRoute() {
   const router = useRouter();
@@ -24,7 +20,7 @@ export default function DashboardRoute() {
       router.replace("/login");
       return;
     }
-    const destination = ROUTES[user.role] ?? "/command-centre";
+    const destination = ROUTES[user.role] ?? DASHBOARD_PATH;
     router.replace(destination);
   }, [router]);
 
