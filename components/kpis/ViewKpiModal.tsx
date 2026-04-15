@@ -192,7 +192,7 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
               <button
                 type="button"
                 onClick={() => setReassignOpen(true)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-surface)]"
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)]"
               >
                 Reassign
               </button>
@@ -236,7 +236,7 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
               </div>
 
               {actionMsg && (
-                <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm text-[var(--text-muted)]">
+                <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2 text-sm text-[var(--text-muted)]">
                   {actionMsg}
                 </div>
               )}
@@ -317,7 +317,7 @@ export default function ViewKpiModal({ open, submission, isReviewer, onClose, on
                 {measurements.map((m, i) => (
                   <div
                     key={m.id}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4"
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="flex items-center gap-2">

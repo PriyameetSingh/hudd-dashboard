@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type SponsorshipType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deriveFinancialEntryStatus } from "@/lib/financial-status";
 import { getDashboardPrioritySchemeIds } from "@/lib/scheme-dashboard-priority";
@@ -330,6 +330,7 @@ function buildEntry(params: {
     code: string;
     name: string;
     vertical: { name: string };
+    sponsorshipType: SponsorshipType;
     subschemes: Array<{ id: string; code: string; name: string }>;
   };
   schemeBudgets: Array<{
@@ -433,5 +434,8 @@ function buildEntry(params: {
     updates,
     dashboardPriority: params.priority.has(scheme.id),
     subschemes: params.subschemeDetails ?? scheme.subschemes.map((s) => ({ id: s.id, code: s.code, name: s.name })),
+    metadata: {
+      sponsorshipType: scheme.sponsorshipType,
+    },
   };
 }
