@@ -256,9 +256,8 @@ export default function SchemesBoardClient({ userRole }: Props) {
               Scheme Budget vs. Expenditure
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
-              {filtered.length} schemes across {totals.verticalCount} verticals — click{" "}
-              <span className="font-medium text-[var(--text-secondary)]">View schemes</span>{" "}
-              to expand.
+              {filtered.length} schemes across {totals.verticalCount} verticals — click a vertical
+              card to expand or collapse.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
@@ -338,7 +337,24 @@ export default function SchemesBoardClient({ userRole }: Props) {
                       return (
                         <div
                           key={g.vertical}
-                          className={`rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm ${ui.cardBorder}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={expanded}
+                          aria-label={`${g.vertical}, ${expanded ? "expanded" : "collapsed"}. Press Enter or Space to toggle.`}
+                          onClick={() =>
+                            setExpandedVertical((v) =>
+                              v === g.vertical ? null : g.vertical,
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setExpandedVertical((v) =>
+                                v === g.vertical ? null : g.vertical,
+                              );
+                            }
+                          }}
+                          className={`cursor-pointer rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm outline-none ring-offset-2 ring-offset-[var(--bg-document)] focus-visible:ring-2 focus-visible:ring-[var(--text-secondary)] ${ui.cardBorder}`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-sm font-semibold leading-snug text-[var(--text-primary)]">
@@ -380,21 +396,19 @@ export default function SchemesBoardClient({ userRole }: Props) {
                               {g.cssCount > 0 && <span>{g.cssCount} CSS</span>}
                               {g.ssCount === 0 && g.cssCount === 0 && "—"}
                             </p>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedVertical((v) =>
-                                  v === g.vertical ? null : g.vertical,
-                                )
-                              }
+                            <span
                               className={`text-[11px] font-medium ${ui.headerText} hover:underline`}
                             >
                               {expanded ? "Collapse ∨" : "View schemes >"}
-                            </button>
+                            </span>
                           </div>
 
                           {expanded && (
-                            <ul className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
+                            <ul
+                              className="mt-3 space-y-2 border-t border-[var(--border)] pt-3"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
                               {sortedSchemes.map((entry) => {
                                 const pct = utilPct(entry);
                                 const kind = sponsorshipKind(entry);
