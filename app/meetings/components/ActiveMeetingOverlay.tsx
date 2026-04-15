@@ -79,29 +79,31 @@ export default function ActiveMeetingOverlay({
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < topics.length - 1;
 
+  const panelLabel = PANELS.find((p) => p.id === effectivePanel)?.label ?? "";
+
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[var(--bg-primary)]">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-[var(--accent)]/8 blur-[120px] animate-pulse" />
-        <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-[var(--accent)]/5 blur-[120px]" />
+        <div className="absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-[var(--accent)]/6 blur-[100px]" />
+        <div className="absolute -bottom-32 -right-32 h-[380px] w-[380px] rounded-full bg-[var(--accent)]/4 blur-[100px]" />
       </div>
 
-      <div className="relative z-10 flex flex-col border-b border-[var(--border)] bg-[var(--bg-card)]/95 backdrop-blur-xl">
-        <div className="flex items-center justify-between px-6 py-4 sm:px-8">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.4em] text-[var(--accent)]">Meeting In Progress</p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
+      <header className="relative z-10 shrink-0 border-b border-[var(--border)] bg-[var(--bg-card)] shadow-sm">
+        <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.35em] text-[var(--accent)]">Live meeting</p>
+            <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-[var(--text-primary)] sm:text-xl">
               {meeting.title ?? "Untitled Meeting"}
             </h1>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {meeting.meetingDate} &middot; FY {getFinancialYear(meeting.meetingDate)}
+              {meeting.meetingDate} · FY {getFinancialYear(meeting.meetingDate)}
             </p>
           </div>
 
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-1.5 sm:px-4">
-              <Clock size={14} className="text-[var(--accent)]" />
-              <span className="font-mono text-sm font-semibold tabular-nums text-[var(--accent)]">
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2">
+              <Clock size={15} className="shrink-0 text-[var(--accent)]" aria-hidden />
+              <span className="font-mono text-sm font-semibold tabular-nums text-[var(--text-primary)]">
                 {fmtTime(elapsed)}
               </span>
             </div>
@@ -110,14 +112,18 @@ export default function ActiveMeetingOverlay({
               id="btn-end-meeting"
               type="button"
               onClick={onClose}
-              className="flex items-center gap-2 rounded-xl border border-[var(--alert-critical)]/40 bg-[var(--alert-critical)]/10 px-3 py-2 text-sm font-medium text-[var(--alert-critical)] transition-all hover:bg-[var(--alert-critical)]/20 sm:px-4"
+              className="flex items-center gap-2 rounded-lg border border-[var(--alert-critical)]/35 bg-[var(--alert-critical)]/[0.07] px-3 py-2 text-sm font-medium text-[var(--alert-critical)] transition-colors hover:bg-[var(--alert-critical)]/15"
             >
-              <X size={16} /> End Meeting
+              <X size={16} aria-hidden /> <span className="hidden sm:inline">End meeting</span>
+              <span className="sm:hidden">End</span>
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] px-5 py-3 sm:px-8">
+        <nav
+          className="flex gap-1.5 overflow-x-auto border-t border-[var(--border)] px-3 py-2.5 sm:px-8"
+          aria-label="Meeting sections"
+        >
           {PANELS.map(({ id, label, icon: Icon }) => {
             if (id === "presentations" && materials.length === 0) return null;
             const active = effectivePanel === id;
@@ -126,162 +132,165 @@ export default function ActiveMeetingOverlay({
                 key={id}
                 type="button"
                 onClick={() => setPanel(id)}
-                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                   active
-                    ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/20"
-                    : "border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:border-[var(--accent)]/30 hover:text-[var(--text-primary)]"
+                    ? "bg-[var(--accent)] text-[var(--accent-text)] shadow-sm"
+                    : "text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={14} className="shrink-0 opacity-90" aria-hidden />
                 {label}
               </button>
             );
           })}
-        </div>
-      </div>
+        </nav>
+      </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-        <aside className="hidden w-72 shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)]/95 p-5 backdrop-blur-lg md:block lg:w-80">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Agenda</p>
-          <p className="mb-4 text-xs text-[var(--text-muted)]">
-            {topics.length} topic{topics.length !== 1 ? "s" : ""}
-          </p>
+        {effectivePanel === "agenda" && (
+          <aside className="hidden w-[min(100%,20rem)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)] p-4 md:block lg:w-80 lg:p-5">
+            <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">Agenda outline</p>
+            <p className="mb-3 text-xs text-[var(--text-muted)]">
+              {topics.length} topic{topics.length !== 1 ? "s" : ""}
+            </p>
 
-          <ul className="space-y-2">
-            {topics.map((t, idx) => {
-              const isCurrent = idx === currentIdx;
-              const isDone = idx < currentIdx;
-              return (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentIdx(idx);
-                      setPanel("agenda");
-                    }}
-                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left text-sm transition-all ${
-                      isCurrent
-                        ? "border border-[var(--accent)]/30 bg-[var(--accent)]/10 font-semibold text-[var(--accent)] shadow-sm shadow-[var(--accent)]/10"
-                        : isDone
-                          ? "text-[var(--text-muted)] line-through opacity-60"
-                          : "text-[var(--text-primary)] hover:bg-[var(--bg-card)]"
-                    }`}
-                  >
-                    <span className="mt-0.5 shrink-0">
-                      {isDone ? (
-                        <CheckCircle2 size={16} className="text-[var(--alert-success)]" />
-                      ) : isCurrent ? (
-                        <MessageCircle size={16} />
-                      ) : (
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full border border-[var(--border)] text-[10px] text-[var(--text-muted)]">
-                          {idx + 1}
-                        </span>
-                      )}
-                    </span>
-                    <span>{t.topic}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6 sm:p-10">
-          {effectivePanel === "agenda" && (
-            <div className="flex flex-1 flex-col items-center justify-center">
-              {topics.length === 0 ? (
-                <p className="text-lg text-[var(--text-muted)]">No discussion topics for this meeting.</p>
-              ) : (
-                <>
-                  <p className="mb-3 text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                    Topic {currentIdx + 1} of {topics.length}
-                  </p>
-
-                  <div
-                    key={topics[currentIdx].id}
-                    className="w-full max-w-2xl animate-[topicIn_0.4s_ease] rounded-3xl border border-[var(--accent)]/20 bg-gradient-to-br from-[var(--accent)]/5 to-transparent p-8 shadow-xl shadow-[var(--accent)]/5 sm:p-10"
-                  >
-                    <MessageCircle size={28} className="mb-4 text-[var(--accent)] opacity-60" />
-                    <h2 className="text-2xl font-semibold leading-snug text-[var(--text-primary)]">
-                      {topics[currentIdx].topic}
-                    </h2>
-                  </div>
-
-                  <div className="mt-8 flex items-center gap-4">
+            <ul className="space-y-1">
+              {topics.map((t, idx) => {
+                const isCurrent = idx === currentIdx;
+                const isDone = idx < currentIdx;
+                return (
+                  <li key={t.id}>
                     <button
                       type="button"
-                      onClick={() => setCurrentIdx((i) => i - 1)}
-                      disabled={!hasPrev}
-                      className="rounded-xl border border-[var(--border)] px-5 py-2 text-sm text-[var(--text-muted)] transition-all hover:bg-[var(--bg-card)] disabled:opacity-30"
+                      onClick={() => setCurrentIdx(idx)}
+                      className={`flex w-full items-start gap-3 rounded-lg px-2.5 py-2.5 text-left text-sm transition-colors ${
+                        isCurrent
+                          ? "bg-[var(--accent)]/10 font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/25"
+                          : isDone
+                            ? "text-[var(--text-muted)] line-through opacity-65"
+                            : "text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
+                      }`}
                     >
-                      Previous
+                      <span className="mt-0.5 shrink-0">
+                        {isDone ? (
+                          <CheckCircle2 size={16} className="text-[var(--alert-success)]" aria-hidden />
+                        ) : isCurrent ? (
+                          <MessageCircle size={16} aria-hidden />
+                        ) : (
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] text-[10px] font-medium text-[var(--text-muted)]">
+                            {idx + 1}
+                          </span>
+                        )}
+                      </span>
+                      <span className="leading-snug">{t.topic}</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIdx((i) => i + 1)}
-                      disabled={!hasNext}
-                      className="flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[var(--accent)]/20 transition-all hover:brightness-110 disabled:opacity-30"
-                    >
-                      Next Topic <ChevronRight size={16} />
-                    </button>
-                  </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        )}
 
-                  <div className="mt-6 flex gap-2">
-                    {topics.map((_, idx) => (
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg-primary)]/80">
+          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-8">
+            {effectivePanel !== "agenda" && (
+              <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">{panelLabel}</p>
+            )}
+
+            {effectivePanel === "agenda" && (
+              <div className="flex flex-1 flex-col justify-center">
+                {topics.length === 0 ? (
+                  <p className="text-center text-[var(--text-muted)]">No discussion topics for this meeting.</p>
+                ) : (
+                  <>
+                    <p className="mb-4 text-center text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)] md:text-left">
+                      Topic {currentIdx + 1} of {topics.length}
+                    </p>
+
+                    <div
+                      key={topics[currentIdx].id}
+                      className="w-full animate-[topicIn_0.35s_ease] rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm sm:p-8"
+                    >
+                      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/10">
+                        <MessageCircle size={22} className="text-[var(--accent)]" aria-hidden />
+                      </div>
+                      <h2 className="text-xl font-semibold leading-snug text-[var(--text-primary)] sm:text-2xl">
+                        {topics[currentIdx].topic}
+                      </h2>
+                    </div>
+
+                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
                       <button
-                        key={idx}
                         type="button"
-                        onClick={() => setCurrentIdx(idx)}
-                        className={`h-2 rounded-full transition-all ${
-                          idx === currentIdx
-                            ? "w-6 bg-[var(--accent)]"
-                            : idx < currentIdx
-                              ? "w-2 bg-[var(--accent)]/40"
-                              : "w-2 bg-[var(--border)]"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                        onClick={() => setCurrentIdx((i) => i - 1)}
+                        disabled={!hasPrev}
+                        className="min-w-[7rem] rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-primary)] disabled:pointer-events-none disabled:opacity-35"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentIdx((i) => i + 1)}
+                        disabled={!hasNext}
+                        className="flex min-w-[7rem] items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-text)] shadow-sm transition-opacity hover:opacity-95 disabled:pointer-events-none disabled:opacity-35"
+                      >
+                        Next <ChevronRight size={16} aria-hidden />
+                      </button>
+                    </div>
 
-          {effectivePanel === "presentations" && materials.length > 0 && (
-            <div className="mx-auto w-full max-w-5xl space-y-4">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Presentation files</h2>
-              <PresentationsPanel meetingId={meeting.id} materials={materials} />
-            </div>
-          )}
+                    <div className="mt-6 flex justify-center gap-1.5 md:justify-start">
+                      {topics.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          aria-label={`Go to topic ${idx + 1}`}
+                          onClick={() => setCurrentIdx(idx)}
+                          className={`h-2 rounded-full transition-all ${
+                            idx === currentIdx
+                              ? "w-7 bg-[var(--accent)]"
+                              : idx < currentIdx
+                                ? "w-2 bg-[var(--accent)]/45"
+                                : "w-2 bg-[var(--border)]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
-          {effectivePanel === "financial" && (
-            <div className="mx-auto w-full max-w-4xl space-y-4">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Financial progress</h2>
-              <FinancialMeetingPanel />
-            </div>
-          )}
+            {effectivePanel === "presentations" && materials.length > 0 && (
+              <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
+                <PresentationsPanel meetingId={meeting.id} materials={materials} />
+              </div>
+            )}
 
-          {effectivePanel === "kpis" && (
-            <div className="mx-auto w-full max-w-4xl space-y-4">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">KPI progress</h2>
-              <KpiMeetingPanel />
-            </div>
-          )}
+            {effectivePanel === "financial" && (
+              <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
+                <FinancialMeetingPanel />
+              </div>
+            )}
 
-          {effectivePanel === "since_last" && (
-            <div className="mx-auto w-full max-w-4xl space-y-4">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Progress since last meeting</h2>
-              <SinceLastMeetingPanel key={meeting.id} meeting={meeting} allMeetings={allMeetings} />
-            </div>
-          )}
+            {effectivePanel === "kpis" && (
+              <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
+                <KpiMeetingPanel />
+              </div>
+            )}
 
-          {effectivePanel === "action_items" && (
-            <div className="mx-auto w-full max-w-4xl space-y-4">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Action items</h2>
-              <ActionItemsMeetingPanel meeting={meeting} />
-            </div>
-          )}
-        </div>
+            {effectivePanel === "since_last" && (
+              <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
+                <SinceLastMeetingPanel key={meeting.id} meeting={meeting} allMeetings={allMeetings} />
+              </div>
+            )}
+
+            {effectivePanel === "action_items" && (
+              <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
+                <ActionItemsMeetingPanel meeting={meeting} />
+              </div>
+            )}
+          </div>
+        </main>
       </div>
 
       <style>{`
