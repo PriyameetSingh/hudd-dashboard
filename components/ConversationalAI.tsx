@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Send, Mic, Bot, User } from "lucide-react";
 import { getCurrentUser, UserRole } from "@/lib/auth";
+import type { ChatResponse } from "@/app/api/ai/chat/route";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -18,6 +19,8 @@ export default function ConversationalAI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
+  const [lastMeta, setLastMeta] = useState<{ toolCalls: number; executionTimeMs: number } | null>(null);
   const user = getCurrentUser();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -60,38 +63,54 @@ export default function ConversationalAI() {
     return base;
   }, [user]);
 
-  const generateResponse = (query: string) => {
-    const role = user?.role ?? UserRole.VIEWER;
-    const prefix = `Scope: ${scopeLabel}.`;
-    const lower = query.toLowerCase();
-    if (lower.includes("overdue")) {
-      return `${prefix}\n\nOverdue items: 4 action items and 2 financial entries require attention. Top overdue scheme: PMAY-U Sewerage (7 days).`;
-    }
-    if (lower.includes("kpi")) {
-      return `${prefix}\n\nKPI status: 5 submissions pending review, 4 approved, 6 awaiting entry. PMAY-U has 1 pending + 1 not submitted.`;
-    }
-    if (lower.includes("financial")) {
-      return `${prefix}\n\nFinancial status: 3 entries pending approval, 2 overdue, 2 drafts in progress. Highest utilisation: MSBY Infrastructure (58%).`;
-    }
-    return `${prefix}\n\nSummary: HUDD dashboard is tracking 12 verticals, 15 action items, and 10 financial entries. Ask about a scheme, KPI, or action item for more detail.`;
-  };
-
   async function send(q?: string) {
     const query = q ?? input.trim();
     if (!query) return;
     setInput("");
-    setMessages(m => [...m, { role: "user", content: query }]);
+    const userMessage: Message = { role: "user", content: query };
+    setMessages(m => [...m, userMessage]);
     setLoading(true);
+    setLastMeta(null);
     try {
-      const response = generateResponse(query);
-      setTimeout(() => {
-        setMessages(m => [...m, { role: "assistant", content: response }]);
-      }, 450);
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: query,
+          conversationId,
+          history: messages.map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      const data: ChatResponse = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || "Request failed");
+      }
+      
+      // Update conversation ID for context maintenance
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
+      
+      // Store metadata for display
+      if (data.meta) {
+        setLastMeta({
+          toolCalls: data.meta.toolCalls,
+          executionTimeMs: data.meta.executionTimeMs,
+        });
+      }
+      
+      const assistantContent = data.response || "Sorry, I couldn't process that.";
+      setMessages(m => [...m, { role: "assistant", content: assistantContent }]);
     } catch (error) {
       console.error("Failed to send message:", error);
-      setMessages(m => [...m, { role: "assistant", content: "Sorry, I'm having trouble connecting. Please try again later." }]);
+      setMessages(m => [...m, { role: "assistant", content: `Sorry, I'm having trouble: ${error instanceof Error ? error.message : "Please try again later."}` }]);
     } finally {
-      setTimeout(() => setLoading(false), 450);
+      setLoading(false);
     }
   }
 
@@ -110,6 +129,11 @@ export default function ConversationalAI() {
         <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Ask NEXUS</h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Conversational intelligence — type or speak your query</p>
         <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Current access: {scopeLabel}</p>
+        {lastMeta && (
+          <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>
+            Used {lastMeta.toolCalls} tool(s) • {lastMeta.executionTimeMs}ms
+          </p>
+        )}
       </div>
 
       {/* Chat area */}
