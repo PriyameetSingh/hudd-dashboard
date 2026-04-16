@@ -60,17 +60,6 @@ function subUtilPct(s: NonNullable<FinancialEntry["subschemes"]>[number]): numbe
   return ((s.ifms ?? 0) / b) * 100;
 }
 
-function hasDetailedSubschemes(e: FinancialEntry): boolean {
-  const subs = e.subschemes;
-  if (!subs?.length) return false;
-  return subs.some(
-    (s) =>
-      typeof s.ifms === "number" ||
-      typeof s.effectiveBudgetCr === "number" ||
-      typeof s.annualBudget === "number",
-  );
-}
-
 const BUCKET_ORDER: Bucket[] = ["critical", "at_risk", "on_track"];
 
 const COLUMN_UI: Record<
@@ -126,17 +115,6 @@ const COLUMN_UI: Record<
   },
 };
 
-type VerticalGroup = {
-  vertical: string;
-  entries: FinancialEntry[];
-  totalRe: number;
-  totalSpent: number;
-  pct: number;
-  bucket: Bucket;
-  ssCount: number;
-  cssCount: number;
-};
-
 type Props = { userRole?: UserRole };
 
 export default function SchemesBoardClient({ userRole }: Props) {
@@ -144,7 +122,7 @@ export default function SchemesBoardClient({ userRole }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
+  const [expandedSchemeId, setExpandedSchemeId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -177,53 +155,20 @@ export default function SchemesBoardClient({ userRole }: Props) {
     );
   }, [entries, query]);
 
-  const verticalGroups = useMemo((): VerticalGroup[] => {
-    const map = new Map<string, FinancialEntry[]>();
-    for (const e of filtered) {
-      const v = e.vertical;
-      if (!map.has(v)) map.set(v, []);
-      map.get(v)!.push(e);
-    }
-    const groups: VerticalGroup[] = [];
-    for (const [vertical, list] of map) {
-      const totalRe = list.reduce((s, e) => s + effBudget(e), 0);
-      const totalSpent = list.reduce((s, e) => s + e.ifms, 0);
-      const pct = totalRe > 0 ? (totalSpent / totalRe) * 100 : 0;
-      let ssCount = 0;
-      let cssCount = 0;
-      for (const e of list) {
-        if (sponsorshipKind(e) === "SS") ssCount += 1;
-        else cssCount += 1;
-      }
-      groups.push({
-        vertical,
-        entries: list,
-        totalRe,
-        totalSpent,
-        pct,
-        bucket: bucketFor(pct),
-        ssCount,
-        cssCount,
-      });
-    }
-    groups.sort((a, b) => b.pct - a.pct);
-    return groups;
-  }, [filtered]);
-
   const columns = useMemo(() => {
-    const cols: Record<Bucket, VerticalGroup[]> = {
+    const cols: Record<Bucket, FinancialEntry[]> = {
       on_track: [],
       at_risk: [],
       critical: [],
     };
-    for (const g of verticalGroups) {
-      cols[g.bucket].push(g);
+    for (const e of filtered) {
+      cols[bucketFor(utilPct(e))].push(e);
     }
     for (const k of BUCKET_ORDER) {
-      cols[k].sort((a, b) => b.pct - a.pct);
+      cols[k].sort((a, b) => utilPct(b) - utilPct(a));
     }
     return cols;
-  }, [verticalGroups]);
+  }, [filtered]);
 
   const totals = useMemo(() => {
     const totalRe = filtered.reduce((s, e) => s + effBudget(e), 0);
@@ -256,8 +201,8 @@ export default function SchemesBoardClient({ userRole }: Props) {
               Scheme Budget vs. Expenditure
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
-              {filtered.length} schemes across {totals.verticalCount} verticals — click a vertical
-              card to expand or collapse.
+              {filtered.length} schemes across {totals.verticalCount} verticals — each card is a
+              scheme; expand to see sub-schemes.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
@@ -329,156 +274,143 @@ export default function SchemesBoardClient({ userRole }: Props) {
                   </div>
 
                   <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
-                    {list.map((g) => {
-                      const expanded = expandedVertical === g.vertical;
-                      const sortedSchemes = [...g.entries].sort(
-                        (a, b) => utilPct(b) - utilPct(a),
-                      );
+                    {list.map((entry) => {
+                      const pct = utilPct(entry);
+                      const kind = sponsorshipKind(entry);
+                      const entryBucket = bucketFor(pct);
+                      const hasSubs =
+                        !!entry.subschemes?.length;
+                      const expanded =
+                        hasSubs && expandedSchemeId === entry.id;
+
+                      const cardClass = `rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm ${ui.cardBorder} ${
+                        hasSubs
+                          ? "cursor-pointer outline-none ring-offset-2 ring-offset-[var(--bg-document)] focus-visible:ring-2 focus-visible:ring-[var(--text-secondary)]"
+                          : ""
+                      }`;
+
                       return (
                         <div
-                          key={g.vertical}
-                          role="button"
-                          tabIndex={0}
-                          aria-expanded={expanded}
-                          aria-label={`${g.vertical}, ${expanded ? "expanded" : "collapsed"}. Press Enter or Space to toggle.`}
-                          onClick={() =>
-                            setExpandedVertical((v) =>
-                              v === g.vertical ? null : g.vertical,
-                            )
+                          key={entry.id}
+                          role={hasSubs ? "button" : undefined}
+                          tabIndex={hasSubs ? 0 : undefined}
+                          aria-expanded={hasSubs ? expanded : undefined}
+                          aria-label={
+                            hasSubs
+                              ? `${entry.scheme}, ${expanded ? "expanded" : "collapsed"}. Press Enter or Space to toggle.`
+                              : undefined
                           }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setExpandedVertical((v) =>
-                                v === g.vertical ? null : g.vertical,
-                              );
-                            }
-                          }}
-                          className={`cursor-pointer rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm outline-none ring-offset-2 ring-offset-[var(--bg-document)] focus-visible:ring-2 focus-visible:ring-[var(--text-secondary)] ${ui.cardBorder}`}
+                          onClick={
+                            hasSubs
+                              ? () =>
+                                  setExpandedSchemeId((id) =>
+                                    id === entry.id ? null : entry.id,
+                                  )
+                              : undefined
+                          }
+                          onKeyDown={
+                            hasSubs
+                              ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    setExpandedSchemeId((id) =>
+                                      id === entry.id ? null : entry.id,
+                                    );
+                                  }
+                                }
+                              : undefined
+                          }
+                          className={cardClass}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold leading-snug text-[var(--text-primary)]">
-                              {g.vertical}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold leading-snug text-[var(--text-primary)]">
+                                {entry.scheme}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                                {entry.vertical} · {entry.id}
+                              </p>
+                            </div>
                             <span
                               className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${ui.badgeBg} ${ui.badgeText}`}
                             >
-                              {bucketLabel(g.bucket)} — {g.pct.toFixed(1)}%
+                              {bucketLabel(entryBucket)} — {pct.toFixed(1)}%
                             </span>
                           </div>
 
                           <p className="mt-2 text-[11px] text-[var(--text-muted)]">
-                            {g.entries.length} schemes · RE ₹{fmtCr(g.totalRe)} Cr · Spent ₹
-                            {fmtCr(g.totalSpent)} Cr
+                            RE ₹{fmtCr(effBudget(entry))} Cr · Spent ₹
+                            {fmtCr(entry.ifms)} Cr
                           </p>
 
                           <div className="mt-2 flex items-center gap-2">
+                            <span
+                              className={`mt-0.5 size-2 shrink-0 rounded-full ${
+                                kind === "SS" ? "bg-sky-500" : "bg-orange-500"
+                              }`}
+                              title={kind === "SS" ? "State Scheme" : "Centrally Sponsored"}
+                            />
                             <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
                               <div
                                 className={`h-full rounded-full transition-all ${ui.barFill}`}
                                 style={{
-                                  width: `${Math.min(100, g.pct)}%`,
+                                  width: `${Math.min(100, pct)}%`,
                                 }}
                               />
                             </div>
                             <span className="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">
-                              {g.pct.toFixed(1)}%
+                              {pct.toFixed(1)}%
                             </span>
                           </div>
 
-                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2">
-                            <p className="text-[10px] text-[var(--text-muted)]">
-                              {g.ssCount > 0 && (
-                                <span className="mr-2">
-                                  {g.ssCount} SS
-                                </span>
-                              )}
-                              {g.cssCount > 0 && <span>{g.cssCount} CSS</span>}
-                              {g.ssCount === 0 && g.cssCount === 0 && "—"}
-                            </p>
-                            <span
-                              className={`text-[11px] font-medium ${ui.headerText} hover:underline`}
-                            >
-                              {expanded ? "Collapse ∨" : "View schemes >"}
-                            </span>
-                          </div>
+                          {hasSubs && (
+                            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-2">
+                              <span
+                                className={`text-[11px] font-medium ${ui.headerText} hover:underline`}
+                              >
+                                {expanded ? "Collapse ∨" : "View sub-schemes >"}
+                              </span>
+                            </div>
+                          )}
 
-                          {expanded && (
+                          {expanded && entry.subschemes && (
                             <ul
                               className="mt-3 space-y-2 border-t border-[var(--border)] pt-3"
                               onClick={(e) => e.stopPropagation()}
                               onKeyDown={(e) => e.stopPropagation()}
                             >
-                              {sortedSchemes.map((entry) => {
-                                const pct = utilPct(entry);
-                                const kind = sponsorshipKind(entry);
-                                const showSubs = hasDetailedSubschemes(entry);
+                              {entry.subschemes.map((sub) => {
+                                const sp = subUtilPct(sub);
+                                const re = subEffBudget(sub);
                                 return (
                                   <li
-                                    key={entry.id}
-                                    className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-2.5"
+                                    key={sub.id}
+                                    className="flex gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-2.5 text-[11px]"
                                   >
-                                    <div className="flex gap-2">
-                                      <span
-                                        className={`mt-1.5 size-2 shrink-0 rounded-full ${
-                                          kind === "SS" ? "bg-sky-500" : "bg-orange-500"
-                                        }`}
-                                      />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                                          {entry.scheme}
-                                        </p>
-                                        <p className="text-[10px] text-[var(--text-muted)]">
-                                          {entry.id}
-                                        </p>
-                                        <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-[var(--text-secondary)] sm:flex sm:flex-wrap sm:gap-x-4">
-                                          <span>RE ₹{fmtCr(effBudget(entry))} Cr</span>
-                                          <span>Spent ₹{fmtCr(entry.ifms)} Cr</span>
-                                        </div>
-                                        {showSubs && entry.subschemes && (
-                                          <ul className="mt-2 space-y-1.5 border-l-2 border-[var(--border)] pl-3">
-                                            {entry.subschemes.map((sub) => {
-                                              const sp = subUtilPct(sub);
-                                              const re = subEffBudget(sub);
-                                              return (
-                                                <li
-                                                  key={sub.id}
-                                                  className="flex gap-2 text-[11px]"
-                                                >
-                                                  <span
-                                                    className={`mt-1 size-1.5 shrink-0 rounded-full ${
-                                                      kind === "SS"
-                                                        ? "bg-sky-400"
-                                                        : "bg-orange-400"
-                                                    }`}
-                                                  />
-                                                  <div className="min-w-0 flex-1">
-                                                    <p className="font-medium text-[var(--text-primary)]">
-                                                      {sub.name}
-                                                    </p>
-                                                    <p className="text-[10px] text-[var(--text-muted)]">
-                                                      {sub.code}
-                                                    </p>
-                                                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] tabular-nums text-[var(--text-secondary)]">
-                                                      <span>RE ₹{fmtCr(re)} Cr</span>
-                                                      <span>
-                                                        Spent ₹{fmtCr(sub.ifms ?? 0)} Cr
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                  <span className="shrink-0 rounded bg-[var(--bg-document)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[var(--text-secondary)]">
-                                                    {sp.toFixed(1)}%
-                                                  </span>
-                                                </li>
-                                              );
-                                            })}
-                                          </ul>
-                                        )}
+                                    <span
+                                      className={`mt-1 size-1.5 shrink-0 rounded-full ${
+                                        kind === "SS"
+                                          ? "bg-sky-400"
+                                          : "bg-orange-400"
+                                      }`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-medium text-[var(--text-primary)]">
+                                        {sub.name}
+                                      </p>
+                                      <p className="text-[10px] text-[var(--text-muted)]">
+                                        {sub.code}
+                                      </p>
+                                      <div className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] tabular-nums text-[var(--text-secondary)]">
+                                        <span>RE ₹{fmtCr(re)} Cr</span>
+                                        <span>
+                                          Spent ₹{fmtCr(sub.ifms ?? 0)} Cr
+                                        </span>
                                       </div>
-                                      <span className="shrink-0 self-start rounded-md bg-[var(--bg-document)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-secondary)]">
-                                        {pct.toFixed(1)}%
-                                      </span>
                                     </div>
+                                    <span className="shrink-0 self-start rounded bg-[var(--bg-document)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[var(--text-secondary)]">
+                                      {sp.toFixed(1)}%
+                                    </span>
                                   </li>
                                 );
                               })}
@@ -489,7 +421,7 @@ export default function SchemesBoardClient({ userRole }: Props) {
                     })}
                     {list.length === 0 && (
                       <p className="py-8 text-center text-xs text-[var(--text-muted)]">
-                        No verticals in this band.
+                        No schemes in this band.
                       </p>
                     )}
                   </div>

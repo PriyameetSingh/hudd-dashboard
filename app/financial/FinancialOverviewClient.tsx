@@ -152,6 +152,8 @@ export default function FinancialOverviewClient({
     }
     let alive = true;
     setLoadingCompare(true);
+    setBaselineSummary(null);
+    setCurrentHeadSummary(null);
     Promise.all([
       fetchFinanceSummary({ asOfDate: resolvedDates.baseline, financialYearLabel: financialYearLabel ?? undefined }),
       fetchFinanceSummary({ asOfDate: resolvedDates.current, financialYearLabel: financialYearLabel ?? undefined }),
@@ -177,20 +179,21 @@ export default function FinancialOverviewClient({
   }, [preset, resolvedDates.baseline, resolvedDates.current, financialYearLabel]);
 
   const activeHeadSummary = useMemo(() => {
-    if (preset !== "none" && currentHeadSummary?.rows?.length) {
+    if (preset === "none") {
+      if (!summary?.rows.length) return null;
       return {
-        financialYearLabel: currentHeadSummary.financialYearLabel,
-        asOfDate: currentHeadSummary.asOfDate,
-        rows: currentHeadSummary.rows,
-        totals: currentHeadSummary.totals,
+        financialYearLabel: summary.financialYearLabel,
+        asOfDate: summary.asOfDate,
+        rows: summary.rows,
+        totals: summary.totals,
       };
     }
-    if (!summary?.rows.length) return null;
+    if (!currentHeadSummary) return null;
     return {
-      financialYearLabel: summary.financialYearLabel,
-      asOfDate: summary.asOfDate,
-      rows: summary.rows,
-      totals: summary.totals,
+      financialYearLabel: currentHeadSummary.financialYearLabel,
+      asOfDate: currentHeadSummary.asOfDate,
+      rows: currentHeadSummary.rows,
+      totals: currentHeadSummary.totals,
     };
   }, [preset, currentHeadSummary, summary]);
 
@@ -466,6 +469,22 @@ export default function FinancialOverviewClient({
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        )}
+
+        {preset !== "none" && loadingCompare && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Budget breakdown (summary heads)</p>
+            <p className="mt-3 text-sm text-[var(--text-muted)]">Loading summary comparison…</p>
+          </div>
+        )}
+
+        {preset !== "none" && !loadingCompare && !activeHeadSummary && resolvedDates.baseline && resolvedDates.current && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Budget breakdown (summary heads)</p>
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              Could not load finance summary for the selected dates. Check that FA summary data exists for both as-of dates.
+            </p>
           </div>
         )}
 

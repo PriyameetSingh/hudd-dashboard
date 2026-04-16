@@ -165,13 +165,6 @@ export default function CommandCentre({ setActive }: Props) {
 
   const approvalCards = [
     {
-      id: "financial",
-      title: "Financial entries",
-      description: "SO/IFMS submissions awaiting approval",
-      count: pendingSummary?.financial ?? 0,
-      href: "/financial",
-    },
-    {
       id: "kpi",
       title: "KPI submissions",
       description: "Outcome/output reports pending review",
@@ -295,14 +288,9 @@ export default function CommandCentre({ setActive }: Props) {
             ))}
         </div>
 
-        <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="w-96 flex flex-col gap-2 ">
           <div
-            style={{
-              fontSize: 12,
-              letterSpacing: 1,
-              textTransform: "uppercase",
-              color: "var(--text-muted)",
-            }}
+            className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2"
           >
             Pending my approval
           </div>

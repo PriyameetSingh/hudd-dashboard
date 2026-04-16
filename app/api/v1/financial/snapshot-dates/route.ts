@@ -4,7 +4,7 @@ import { requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
-/** Distinct snapshot dates (desc) for the active FY — used for comparison pickers. */
+/** Distinct FA summary as-of dates (desc) for the active FY — must match `/api/v1/financial/summary?asOfDate=`. */
 export async function GET() {
   try {
     await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
@@ -14,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ dates: [] });
     }
 
-    const rows = await prisma.financeExpenditureSnapshot.groupBy({
+    const rows = await prisma.financeSummaryHead.groupBy({
       by: ["asOfDate"],
       where: { financialYearId: fy.id },
       orderBy: { asOfDate: "desc" },
