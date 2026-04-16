@@ -3,15 +3,15 @@ import { toNumber } from "@/lib/financial-budget-entries";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
 import type { FinancialEntry } from "@/types";
 
-export type CommandCentreVerticalSummary = {
+export type CommandCentreSchemeSummary = {
   id: string;
-  name: string;
+  scheme: string;
+  vertical: string;
   budgetCr: number;
   ifmsCr: number;
   soCr: number;
   pct: number;
   status: "critical" | "warning" | "on-track";
-  schemeCount: number;
 };
 
 export type CommandCentreSchemeLeader = {
@@ -45,13 +45,13 @@ export type CommandCentreDashboard = {
     utilisationPct: number;
     lapseRiskCr: number;
   };
-  verticals: CommandCentreVerticalSummary[];
+  schemes: CommandCentreSchemeSummary[];
   topSchemes: CommandCentreSchemeLeader[];
   bottomSchemes: CommandCentreSchemeLeader[];
   ifmsTrend: CommandCentreIfmsTrendPoint[];
   overdueActionsCount: number;
   overdueActionsPreview: CommandCentreOverduePreview[];
-  criticalVerticalCount: number;
+  criticalSchemeCount: number;
 };
 
 function schemePct(entry: FinancialEntry): number {
@@ -60,7 +60,7 @@ function schemePct(entry: FinancialEntry): number {
   return (entry.ifms / b) * 100;
 }
 
-function verticalStatusFromPct(pct: number): CommandCentreVerticalSummary["status"] {
+function schemeStatusFromPct(pct: number): CommandCentreSchemeSummary["status"] {
   if (pct < 40) return "critical";
   if (pct < 75) return "warning";
   return "on-track";
@@ -107,35 +107,21 @@ export async function getCommandCentreDashboard(): Promise<CommandCentreDashboar
   const utilisationPct = totalBudgetCr > 0 ? (totalIfmsCr / totalBudgetCr) * 100 : 0;
   const lapseRiskCr = Math.max(0, totalBudgetCr - totalIfmsCr);
 
-  const byVertical = new Map<
-    string,
-    { budget: number; ifms: number; so: number; count: number }
-  >();
-  for (const e of entries) {
-    const v = e.vertical || "—";
-    const row = byVertical.get(v) ?? { budget: 0, ifms: 0, so: 0, count: 0 };
-    const b = e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0);
-    row.budget += b;
-    row.ifms += e.ifms;
-    row.so += e.so;
-    row.count += 1;
-    byVertical.set(v, row);
-  }
-
-  const verticals: CommandCentreVerticalSummary[] = Array.from(byVertical.entries()).map(([name, agg], idx) => {
-    const pct = agg.budget > 0 ? (agg.ifms / agg.budget) * 100 : 0;
+  const schemes: CommandCentreSchemeSummary[] = entries.map((e) => {
+    const budgetCr = e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0);
+    const pct = schemePct(e);
     return {
-      id: `v-${idx}-${name.replace(/\s+/g, "-").slice(0, 24)}`,
-      name,
-      budgetCr: agg.budget,
-      ifmsCr: agg.ifms,
-      soCr: agg.so,
+      id: e.id,
+      scheme: e.scheme,
+      vertical: e.vertical || "—",
+      budgetCr,
+      ifmsCr: e.ifms,
+      soCr: e.so,
       pct,
-      status: verticalStatusFromPct(pct),
-      schemeCount: agg.count,
+      status: schemeStatusFromPct(pct),
     };
   });
-  verticals.sort((a, b) => b.budgetCr - a.budgetCr);
+  schemes.sort((a, b) => b.budgetCr - a.budgetCr);
 
   const withPct = entries.map((e) => ({
     entry: e,
@@ -181,7 +167,7 @@ export async function getCommandCentreDashboard(): Promise<CommandCentreDashboar
     ),
   }));
 
-  const criticalVerticalCount = verticals.filter((v) => v.status === "critical").length;
+  const criticalSchemeCount = schemes.filter((s) => s.status === "critical").length;
 
   return {
     financialYearLabel,
@@ -193,12 +179,12 @@ export async function getCommandCentreDashboard(): Promise<CommandCentreDashboar
       utilisationPct,
       lapseRiskCr,
     },
-    verticals,
+    schemes,
     topSchemes,
     bottomSchemes,
     ifmsTrend,
     overdueActionsCount: overdueCount,
     overdueActionsPreview,
-    criticalVerticalCount,
+    criticalSchemeCount,
   };
 }

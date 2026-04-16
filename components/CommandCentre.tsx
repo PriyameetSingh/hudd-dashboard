@@ -35,6 +35,77 @@ function pctTrendFromValue(pct: number): number[] {
   return [p * 0.45, p * 0.58, p * 0.68, p * 0.78, p * 0.88, p].map((x) => Math.round(x * 10) / 10);
 }
 
+/** Financial progress leader cards (dashboard reference styling) */
+const FP = {
+  header: "#718096",
+  green: "#1e5631",
+  greenBadge: "#2f855a",
+  red: "#e53e3e",
+  redPillBg: "rgba(229, 62, 62, 0.14)",
+  title: "#333333",
+  track: "rgba(0, 0, 0, 0.08)",
+};
+
+function SchemeFinancialProgressRow({
+  name,
+  pct,
+  variant,
+}: {
+  name: string;
+  pct: number;
+  variant: "top" | "bottom";
+}) {
+  const fill = variant === "top" ? FP.green : FP.red;
+  const pctColor = variant === "top" ? FP.green : FP.red;
+  const label = name.length > 52 ? `${name.slice(0, 52)}…` : name;
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          marginBottom: 6,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: FP.title,
+            lineHeight: 1.35,
+          }}
+        >
+          {label}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
+            color: pctColor,
+            flexShrink: 0,
+          }}
+        >
+          {pct.toFixed(1)}%
+        </span>
+      </div>
+      <div style={{ height: 3, background: FP.track, borderRadius: 9999, overflow: "hidden" }}>
+        <div
+          style={{
+            height: "100%",
+            width: `${Math.min(100, Math.max(0, pct))}%`,
+            background: fill,
+            borderRadius: 9999,
+            minWidth: pct > 0 ? 3 : 0,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   setActive: (id: string) => void;
 }
@@ -174,7 +245,7 @@ export default function CommandCentre({ setActive }: Props) {
               {
                 label: "OVERDUE ACTIONS",
                 value: dashboard ? String(dashboard.overdueActionsCount) : "—",
-                sub: `${dashboard?.criticalVerticalCount ?? 0} critical verticals`,
+                sub: `${dashboard?.criticalSchemeCount ?? 0} critical schemes`,
                 icon: <Clock size={16} />,
                 accent: Boolean(dashboard && dashboard.overdueActionsCount > 0),
               },
@@ -357,12 +428,12 @@ export default function CommandCentre({ setActive }: Props) {
               marginBottom: 10,
             }}
           >
-            Verticals (aggregated)
+            Schemes
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {(dashboard?.verticals ?? []).map((v) => (
+            {(dashboard?.schemes ?? []).map((s) => (
               <button
-                key={v.id}
+                key={s.id}
                 type="button"
                 onClick={() => setActive("schemes")}
                 style={{
@@ -373,21 +444,34 @@ export default function CommandCentre({ setActive }: Props) {
                   cursor: "pointer",
                   textAlign: "left",
                   transition: "border-color 0.15s",
-                  borderTop: `3px solid ${statusColor(v.status)}`,
+                  borderTop: `3px solid ${statusColor(s.status)}`,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{v.schemeCount} schemes</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "var(--text-muted)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      minWidth: 0,
+                    }}
+                    title={s.vertical}
+                  >
+                    {s.vertical}
+                  </span>
                   <span
                     style={{
                       fontSize: 9,
                       fontWeight: 600,
                       letterSpacing: 1,
                       textTransform: "uppercase",
-                      color: statusColor(v.status),
+                      color: statusColor(s.status),
+                      flexShrink: 0,
                     }}
                   >
-                    {statusLabel(v.status)}
+                    {statusLabel(s.status)}
                   </span>
                 </div>
                 <div
@@ -399,7 +483,7 @@ export default function CommandCentre({ setActive }: Props) {
                     lineHeight: 1.3,
                   }}
                 >
-                  {v.name}
+                  {s.scheme}
                 </div>
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 3 }}>
@@ -411,126 +495,28 @@ export default function CommandCentre({ setActive }: Props) {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {v.pct.toFixed(1)}%
+                      {s.pct.toFixed(1)}%
                     </span>
                   </div>
                   <div style={{ height: 4, background: "var(--border)", borderRadius: 2 }}>
                     <div
                       style={{
                         height: "100%",
-                        width: `${Math.min(v.pct, 100)}%`,
-                        background: statusColor(v.status),
+                        width: `${Math.min(s.pct, 100)}%`,
+                        background: statusColor(s.status),
                         borderRadius: 2,
                       }}
                     />
                   </div>
                 </div>
-                <CommandCentreSparkLine data={pctTrendFromValue(v.pct)} />
+                <CommandCentreSparkLine data={pctTrendFromValue(s.pct)} />
               </button>
             ))}
           </div>
-
-          {dashboard && dashboard.topSchemes.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  color: "var(--text-muted)",
-                  marginBottom: 8,
-                }}
-              >
-                Top schemes by budget utilisation
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {dashboard.topSchemes.slice(0, 5).map((s) => (
-                  <div
-                    key={s.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 11,
-                      padding: "6px 8px",
-                      borderRadius: 6,
-                      background: "var(--bg-card)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{s.scheme}</span>
-                    <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
-                      {s.pct.toFixed(1)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <AiAlertsCard />
-
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              padding: "14px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  color: "var(--text-muted)",
-                }}
-              >
-                Underperforming Schemes (financial Progress)
-              </span>
-              <button
-                type="button"
-                onClick={() => router.push("/financial/schemes-board")}
-                style={{
-                  fontSize: 10,
-                  color: "var(--text-muted)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 2,
-                }}
-              >
-                Board <ArrowUpRight size={10} />
-              </button>
-            </div>
-            {(dashboard?.bottomSchemes ?? []).slice(0, 4).map((s) => (
-              <div
-                key={s.id}
-                style={{ marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}
-              >
-                <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.3, marginBottom: 3 }}>
-                  {s.scheme.length > 42 ? `${s.scheme.slice(0, 42)}…` : s.scheme}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{s.vertical}</span>
-                  <span style={{ fontSize: 10, color: "var(--alert-warning)", fontWeight: 600 }}>
-                    {s.pct.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
 
           <div
             style={{
@@ -590,6 +576,130 @@ export default function CommandCentre({ setActive }: Props) {
             ))}
           </div>
         </div>
+
+        {!dashLoading && dashboard && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+            }}
+          >
+            <div
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                padding: "20px 22px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 18,
+                  gap: 12,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: "0.07em",
+                    textTransform: "uppercase",
+                    color: FP.header,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Top Performing Schemes (Financial Progress)
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: FP.greenBadge, flexShrink: 0 }}>≥ 75%</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {dashboard.topSchemes.length === 0 ? (
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>No scheme data for this period.</span>
+                ) : (
+                  dashboard.topSchemes.slice(0, 5).map((s) => (
+                    <SchemeFinancialProgressRow key={s.id} name={s.scheme} pct={s.pct} variant="top" />
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                padding: "20px 22px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 18,
+                  gap: 12,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: "0.07em",
+                    textTransform: "uppercase",
+                    color: FP.header,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Underperforming Schemes (Financial Progress)
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: FP.red,
+                      background: FP.redPillBg,
+                      padding: "3px 10px",
+                      borderRadius: 9999,
+                    }}
+                  >
+                    &lt; 40%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/financial/schemes-board")}
+                    style={{
+                      fontSize: 10,
+                      color: "var(--text-muted)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 2,
+                    }}
+                  >
+                    Board <ArrowUpRight size={10} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {(dashboard.bottomSchemes ?? []).length === 0 ? (
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>No scheme data for this period.</span>
+                ) : (
+                  (dashboard.bottomSchemes ?? []).slice(0, 5).map((s) => (
+                    <SchemeFinancialProgressRow key={s.id} name={s.scheme} pct={s.pct} variant="bottom" />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

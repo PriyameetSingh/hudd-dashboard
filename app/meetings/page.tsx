@@ -218,27 +218,15 @@ function MeetingCard({
           </div>
         )}
 
-        <div className="mt-4 text-xs text-[var(--text-muted)]">
-          <p className="text-[10px] font-medium uppercase tracking-[0.3em]">Discussion topics</p>
-          <ul className="mt-2 list-disc space-y-1 pl-4">
-            {meeting.topics.length === 0 && <li>No topics recorded</li>}
-            {meeting.topics.map((t) => (
-              <li key={t.id}>{t.topic}</li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="mt-4 text-xs text-[var(--text-muted)]">
-          <p className="text-[10px] font-medium uppercase tracking-[0.3em]">Action items</p>
-          <ul className="mt-2 space-y-1">
-            {meeting.actionItems.length === 0 && <li>None linked</li>}
-            {meeting.actionItems.map((a) => (
-              <li key={a.id} className="flex justify-between gap-2">
-                <span>{a.title}</span>
-                <span className="text-[10px] uppercase">{a.status}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-[var(--text-muted)]">
+          <p>
+            <span className="text-[10px] font-medium uppercase tracking-[0.3em]">Discussion topics</span>
+            <span className="ml-2 tabular-nums text-[var(--text-primary)]">{meeting.topics.length}</span>
+          </p>
+          <p>
+            <span className="text-[10px] font-medium uppercase tracking-[0.3em]">Action items</span>
+            <span className="ml-2 tabular-nums text-[var(--text-primary)]">{meeting.actionItems.length}</span>
+          </p>
         </div>
 
         {isToday && onStart && (
