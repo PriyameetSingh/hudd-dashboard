@@ -38,6 +38,18 @@ const matchUser = (name: string) => {
   );
 };
 
+function isDesignatedReviewer(item: ActionItem, u: { id: string; name: string }): boolean {
+  const code = item.reviewerUserCode?.trim().toLowerCase();
+  if (code && code === u.id.trim().toLowerCase()) return true;
+  return normalize(item.reviewer) === normalize(u.name);
+}
+
+function isAssignedOfficer(item: ActionItem, u: { id: string; name: string }): boolean {
+  const code = item.assignedToUserCode?.trim().toLowerCase();
+  if (code && code === u.id.trim().toLowerCase()) return true;
+  return normalize(item.assignedTo) === normalize(u.name);
+}
+
 export default function ActionItemDetailPage() {
   const user = useRequireAuth();
   const router = useRouter();
@@ -81,7 +93,16 @@ export default function ActionItemDetailPage() {
 
   const isViewer = user?.role === UserRole.VIEWER;
   const isNodal = user?.role === UserRole.NODAL_OFFICER;
-  const isReviewer = user ? [UserRole.TASU, UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user.role) : false;
+  const canReviewerAct = Boolean(
+    item &&
+      user &&
+      [UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user.role) &&
+      item.status === "UNDER_REVIEW" &&
+      isDesignatedReviewer(item, user),
+  );
+  const showNodalActions = Boolean(
+    item && isNodal && !isViewer && user && isAssignedOfficer(item, user),
+  );
 
   const canAddManualUpdate = useMemo(() => {
     if (!item || !user || isViewer) return false;
@@ -203,7 +224,7 @@ export default function ActionItemDetailPage() {
                 ))}
               </div>
             </div>
-            {isNodal && !isViewer && (
+            {showNodalActions && (
               <>
                 <button
                   className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)] disabled:opacity-50"
@@ -251,7 +272,7 @@ export default function ActionItemDetailPage() {
               </>
             )}
 
-            {isReviewer && !isViewer && (
+            {canReviewerAct && !isViewer && (
               <>
                 <button
                   className="w-full rounded-xl bg-[var(--text-primary)] px-4 py-2 text-sm font-semibold text-[var(--bg-primary)]"

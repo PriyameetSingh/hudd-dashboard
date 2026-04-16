@@ -92,7 +92,7 @@ type NavItem = {
 const items: NavItem[] = [
   {
     label: "Dashboard",
-    href: "/command-centre",
+    href: "/dashboard",
     icon: LayoutDashboard,
     roles: Object.values(UserRole),
   },
@@ -205,6 +205,14 @@ const badgeColors: Record<UserRole, string> = {
   [UserRole.VIEWER]: "bg-[#7f8c8d]",
 };
 
+/** Dashboard merged from legacy `/command-centre`; keep both paths highlighting the same nav item. */
+function isTopNavActive(pathname: string, href: string) {
+  if (href === "/dashboard") {
+    return pathname === "/dashboard" || pathname === "/command-centre";
+  }
+  return pathname === href;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
@@ -298,7 +306,7 @@ export default function Sidebar() {
             <div key={item.href}>
               <Link
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${pathname === item.href ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
+                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium ${isTopNavActive(pathname, item.href) ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-text-primary)]" : "text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-text-primary)]"}`}
               >
                 <item.icon size={16} />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">

@@ -12,6 +12,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "db:clear-mock": "tsx prisma/clear_mock_data.ts",
     "verify:behaviors": "node scripts/verify-behaviors.mjs"
   },
   "prisma": {
@@ -42,6 +43,7 @@
     "prisma": "^6.6.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

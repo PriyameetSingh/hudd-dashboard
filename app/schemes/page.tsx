@@ -192,7 +192,7 @@ export default function SchemesPage() {
                           <td colSpan={canManageSchemes ? 10 : 9} className="px-6 py-4">
                             <div className="grid gap-6 lg:grid-cols-3">
                               <div>
-                                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Subschemes</p>
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Components</p>
                                 {s.subschemes.length === 0 ? (
                                   <p className="mt-2 text-sm text-[var(--text-muted)]">None</p>
                                 ) : (
@@ -217,7 +217,7 @@ export default function SchemesPage() {
                                           <th className="pb-2 pr-3">Description</th>
                                           <th className="pb-2 pr-3">Type</th>
                                           <th className="pb-2 pr-3">Category</th>
-                                          <th className="pb-2">Subscheme</th>
+                                          <th className="pb-2">Component</th>
                                         </tr>
                                       </thead>
                                       <tbody>

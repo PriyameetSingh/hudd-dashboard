@@ -381,7 +381,7 @@ export default function KPIsPage() {
               {tab.label}
             </button>
           ))}
-          {(focusScheme
+          {/* {(focusScheme
             ? submissionsForFocus.filter((s) => s.status === "submitted_pending").length
             : summary.pending) > 0 && (
             <PendingBadge
@@ -391,7 +391,7 @@ export default function KPIsPage() {
                   : summary.pending
               }
             />
-          )}
+          )} */}
         </div>
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">

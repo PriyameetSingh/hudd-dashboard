@@ -31,6 +31,13 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
+/** True when this user is the item's reviewer (API codes align with mock user ids, e.g. acs). */
+function isDesignatedReviewer(item: ActionItem, u: { id: string; name: string }): boolean {
+  const code = item.reviewerUserCode?.trim().toLowerCase();
+  if (code && code === u.id.trim().toLowerCase()) return true;
+  return normalize(item.reviewer) === normalize(u.name);
+}
+
 function lastActivityMs(item: ActionItem): number {
   if (item.updates?.length) {
     return Math.max(...item.updates.map((u) => new Date(u.timestamp).getTime()));
@@ -94,22 +101,12 @@ export default function ActionItemsPage() {
     };
   }, []);
 
-  const roleFiltered = useMemo(() => {
-    if (!user) return [];
-    if (user.role === UserRole.TASU) return items;
-    if (user.role === UserRole.NODAL_OFFICER) {
-      const target = normalize(user.name);
-      return items.filter((item) => normalize(item.assignedTo).includes(target));
-    }
-    if ([UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user.role)) {
-      return items.filter((item) => item.status === "UNDER_REVIEW");
-    }
-    return items;
-  }, [items, user]);
+  /** Full list for every role; only per-item actions are gated by assignment / permissions. */
+  const listItems = useMemo(() => (user ? items : []), [user, items]);
 
   const filtered = useMemo(() => {
     const activeFilter = STATUS_FILTERS.find((entry) => entry.id === filter) ?? STATUS_FILTERS[0];
-    return roleFiltered.filter((item) => {
+    return listItems.filter((item) => {
       const matchesQuery =
         item.title.toLowerCase().includes(query.toLowerCase()) ||
         item.vertical.toLowerCase().includes(query.toLowerCase()) ||
@@ -136,12 +133,12 @@ export default function ActionItemsPage() {
       })();
       return matchesQuery && activeFilter.match(item.status) && matchesVertical && matchesAssignee && matchesPriority && matchesDue;
     });
-  }, [roleFiltered, query, filter, verticalFilter, assigneeFilter, priorityFilter, dueFilter]);
+  }, [listItems, query, filter, verticalFilter, assigneeFilter, priorityFilter, dueFilter]);
 
   const trackerFiltered = useMemo(() => {
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
-    return roleFiltered.filter((item) => {
+    return listItems.filter((item) => {
       if (trackerStatus !== "all" && item.status !== trackerStatus) return false;
       const last = lastActivityMs(item);
       const age = now - last;
@@ -151,13 +148,13 @@ export default function ActionItemsPage() {
       if (trackerActivity === "inactive_30") return age > 30 * day;
       return true;
     });
-  }, [roleFiltered, trackerActivity, trackerStatus]);
+  }, [listItems, trackerActivity, trackerStatus]);
 
   const stats = useMemo(() => {
-    const total = roleFiltered.length;
-    const overdue = roleFiltered.filter((item) => item.status === "OVERDUE").length;
-    const completed = roleFiltered.filter((item) => item.status === "COMPLETED").length;
-    const dueThisWeek = roleFiltered.filter((item) => {
+    const total = listItems.length;
+    const overdue = listItems.filter((item) => item.status === "OVERDUE").length;
+    const completed = listItems.filter((item) => item.status === "COMPLETED").length;
+    const dueThisWeek = listItems.filter((item) => {
       const due = new Date(item.dueDate);
       const now = new Date();
       const week = new Date();
@@ -165,14 +162,14 @@ export default function ActionItemsPage() {
       return due >= now && due <= week;
     }).length;
     return { total, overdue, dueThisWeek, completed };
-  }, [roleFiltered]);
+  }, [listItems]);
 
   const verticalOptions = useMemo(() => ["all", ...Array.from(new Set(items.map((item) => item.vertical)))], [items]);
   const assigneeOptions = useMemo(() => ["all", ...Array.from(new Set(items.map((item) => item.assignedTo)))], [items]);
   const priorityOptions = useMemo(() => ["all", ...Array.from(new Set(items.map((item) => item.priority)))], [items]);
 
   const isViewer = user?.role === UserRole.VIEWER;
-  const showStats = user && [UserRole.TASU, UserRole.AS, UserRole.PS_HUDD].includes(user.role);
+  const showStats = !!user;
   const canReassignActionItems =
     !!user && !isViewer && hasPermission(user, Permission.UPDATE_ACTION_ITEMS);
 
@@ -425,10 +422,18 @@ export default function ActionItemsPage() {
                         Reassign
                       </button>
                     )}
-                    {[UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user?.role ?? UserRole.VIEWER) && !isViewer && (
+                    {user &&
+                      [UserRole.AS, UserRole.PS_HUDD, UserRole.ACS].includes(user.role) &&
+                      !isViewer &&
+                      item.status === "UNDER_REVIEW" &&
+                      isDesignatedReviewer(item, user) && (
                       <>
-                        <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Approve</button>
-                        <button className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">Reject</button>
+                        <button type="button" className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">
+                          Approve
+                        </button>
+                        <button type="button" className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">
+                          Reject
+                        </button>
                       </>
                     )}
                   </div>

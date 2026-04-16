@@ -544,7 +544,7 @@ export default function FinancialOverviewClient({
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheme entries</p>
               <p className="text-sm text-[var(--text-muted)]">
-                Per-scheme budgets, subschemes, and revision history from the database. Point-in-time deltas for each scheme
+                Per-scheme budgets, scheme components, and revision history from the database. Point-in-time deltas for each scheme
                 require historical reconstruction; use summary comparison above for official head movement.
               </p>
             </div>
