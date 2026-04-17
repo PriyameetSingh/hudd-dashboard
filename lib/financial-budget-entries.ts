@@ -89,49 +89,50 @@ export async function getFinancialBudgetEntriesOverview(actor?: DbUserWithRbac |
 }> {
   const resolved = actor !== undefined ? actor : await getDbUserBySession();
   const roleIds = resolved?.userRoles?.map((ur: { roleId: string }) => ur.roleId) ?? [];
-  const priority = await getDashboardPrioritySchemeIds(resolved?.id, roleIds);
 
-  const fy = await prisma.financialYear.findFirst({
-    orderBy: { endDate: "desc" },
-  });
+  const [priority, fy] = await Promise.all([
+    getDashboardPrioritySchemeIds(resolved?.id, roleIds),
+    prisma.financialYear.findFirst({
+      orderBy: { endDate: "desc" },
+    }),
+  ]);
 
   if (!fy) {
     return { entries: [], financialYearLabel: null };
   }
 
-  const schemes = await prisma.scheme.findMany({
-    include: {
-      vertical: true,
-      subschemes: { orderBy: { name: "asc" } },
-    },
-    orderBy: { name: "asc" },
-  });
-
-  const budgets = await prisma.financeBudget.findMany({
-    where: { financialYearId: fy.id },
-    include: {
-      scheme: { include: { vertical: true } },
-      createdBy: { select: { name: true } },
-      financialYear: { select: { label: true } },
-      revisions: {
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        include: { createdBy: { select: { name: true } } },
+  const [schemes, budgets, snapshots, supplements] = await Promise.all([
+    prisma.scheme.findMany({
+      include: {
+        vertical: true,
+        subschemes: { orderBy: { name: "asc" } },
       },
-    },
-  });
-
-  const snapshots = await prisma.financeExpenditureSnapshot.findMany({
-    where: { financialYearId: fy.id },
-    orderBy: { asOfDate: "desc" },
-    include: { createdBy: { select: { name: true } } },
-  });
-
-  const supplements = await prisma.financeBudgetSupplement.findMany({
-    where: { financialYearId: fy.id },
-    include: { createdBy: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { name: "asc" },
+    }),
+    prisma.financeBudget.findMany({
+      where: { financialYearId: fy.id },
+      include: {
+        scheme: { include: { vertical: true } },
+        createdBy: { select: { name: true } },
+        financialYear: { select: { label: true } },
+        revisions: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          include: { createdBy: { select: { name: true } } },
+        },
+      },
+    }),
+    prisma.financeExpenditureSnapshot.findMany({
+      where: { financialYearId: fy.id },
+      orderBy: { asOfDate: "desc" },
+      include: { createdBy: { select: { name: true } } },
+    }),
+    prisma.financeBudgetSupplement.findMany({
+      where: { financialYearId: fy.id },
+      include: { createdBy: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   const budgetsByScheme = new Map<string, typeof budgets>();
   for (const b of budgets) {

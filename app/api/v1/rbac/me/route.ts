@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/server-auth";
-import { getDbUserBySession, getEffectivePermissionCodesFromUser, toAuthErrorResponse } from "@/lib/server-rbac";
+import { getEffectivePermissionCodesFromUserId, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -11,8 +12,12 @@ export async function GET() {
       return NextResponse.json({ user: null, permissions: [] });
     }
 
-    const dbUser = await getDbUserBySession();
-    const permissions = Array.from(getEffectivePermissionCodesFromUser(dbUser));
+    const dbUser = await prisma.user.findFirst({
+      where: { code: sessionUser.id },
+      select: { id: true, name: true, email: true },
+    });
+
+    const permissions = dbUser ? Array.from(await getEffectivePermissionCodesFromUserId(dbUser.id)) : [];
 
     return NextResponse.json({
       user: {

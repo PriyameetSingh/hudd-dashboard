@@ -1,14 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 
-declare global {
-  var prisma: PrismaClient | undefined;
-}
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
-/** Use the Supabase pooler URL (port 6543, `?pgbouncer=true`) for serverless if you see slow connects or pool exhaustion. */
+/** Use the Supabase pooler URL (port 6543, `?pgbouncer=true&connection_limit=1`) for Vercel serverless. */
 const datasourceUrl = process.env.DATABASE_URL;
 
 export const prisma =
-  global.prisma ??
+  globalForPrisma.prisma ??
   new PrismaClient(
     datasourceUrl
       ? {
@@ -18,9 +16,9 @@ export const prisma =
             },
           },
         }
-      : undefined
+      : undefined,
   );
 
-if (process.env.NODE_ENV !== "production") {
-  global.prisma = prisma;
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = prisma;
 }

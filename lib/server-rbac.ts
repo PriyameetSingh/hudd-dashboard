@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { asDatabaseUnavailableError, toDatabaseErrorResponse } from "@/lib/db-errors";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/server-auth";
@@ -50,6 +51,43 @@ export const getDbUserBySession = cache(loadDbUserBySession);
 
 export type DbUserWithRbac = NonNullable<Awaited<ReturnType<typeof loadDbUserBySession>>>;
 
+/**
+ * Resolves effective permission codes with one SQL round-trip (no deep role graph).
+ * Matches role grants + allow overrides, minus deny overrides.
+ */
+export async function getEffectivePermissionCodesFromUserId(userId: string): Promise<Set<string>> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ code: string }>>(
+      Prisma.sql`
+        (
+          SELECT p."code"
+          FROM "user_roles" ur
+          INNER JOIN "role_permissions" rp ON rp."roleId" = ur."roleId"
+          INNER JOIN "permissions" p ON p."id" = rp."permissionId"
+          WHERE ur."userId" = ${userId}::uuid
+          UNION
+          SELECT p."code"
+          FROM "user_permission_overrides" o
+          INNER JOIN "permissions" p ON p."id" = o."permissionId"
+          WHERE o."userId" = ${userId}::uuid AND o."effect" = 'allow'::"PermissionEffect"
+        )
+        EXCEPT
+        (
+          SELECT p."code"
+          FROM "user_permission_overrides" o
+          INNER JOIN "permissions" p ON p."id" = o."permissionId"
+          WHERE o."userId" = ${userId}::uuid AND o."effect" = 'deny'::"PermissionEffect"
+        )
+      `,
+    );
+    return new Set(rows.map((r) => r.code));
+  } catch (e) {
+    const mapped = asDatabaseUnavailableError(e);
+    if (mapped) throw mapped;
+    throw e;
+  }
+}
+
 export function getEffectivePermissionCodesFromUser(user: DbUserWithRbac | null): Set<string> {
   if (!user) return new Set();
 
@@ -68,28 +106,41 @@ export function getEffectivePermissionCodesFromUser(user: DbUserWithRbac | null)
   return effective;
 }
 
-export async function getEffectivePermissionCodes(): Promise<Set<string>> {
-  const user = await getDbUserBySession();
-  return getEffectivePermissionCodesFromUser(user);
+async function loadEffectivePermissionCodes(): Promise<Set<string>> {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return new Set();
+  try {
+    const row = await prisma.user.findFirst({
+      where: { code: sessionUser.id },
+      select: { id: true },
+    });
+    if (!row) return new Set();
+    return await getEffectivePermissionCodesFromUserId(row.id);
+  } catch (e) {
+    const mapped = asDatabaseUnavailableError(e);
+    if (mapped) throw mapped;
+    throw e;
+  }
 }
 
+/** Cached per request: lightweight permission resolution (no deep RBAC graph). */
+export const getEffectivePermissionCodes = cache(loadEffectivePermissionCodes);
+
 export async function requirePermission(permissionCode: string) {
-  const user = await getDbUserBySession();
-  const effective = getEffectivePermissionCodesFromUser(user);
+  const effective = await getEffectivePermissionCodes();
   if (!effective.has(permissionCode)) {
     throw new AuthError(403, "Forbidden");
   }
 }
 
 export async function requireAnyPermission(...permissionCodes: string[]) {
-  const user = await getDbUserBySession();
-  const effective = getEffectivePermissionCodesFromUser(user);
+  const effective = await getEffectivePermissionCodes();
   if (!permissionCodes.some((code) => effective.has(code))) {
     throw new AuthError(403, "Forbidden");
   }
 }
 
-/** Same as requirePermission but returns the loaded DB user for reuse (single getDbUserBySession per handler). */
+/** Same as requirePermission but returns the loaded DB user for reuse (full graph once for actor fields). */
 export async function requirePermissionAndDbUser(permissionCode: string) {
   const user = await getDbUserBySession();
   const effective = getEffectivePermissionCodesFromUser(user);
@@ -99,7 +150,7 @@ export async function requirePermissionAndDbUser(permissionCode: string) {
   return user;
 }
 
-/** Same as requireAnyPermission but returns the loaded DB user for reuse (single getDbUserBySession per handler). */
+/** Same as requireAnyPermission but returns the loaded DB user for reuse. */
 export async function requireAnyPermissionAndDbUser(...permissionCodes: string[]) {
   const user = await getDbUserBySession();
   const effective = getEffectivePermissionCodesFromUser(user);
@@ -110,8 +161,8 @@ export async function requireAnyPermissionAndDbUser(...permissionCodes: string[]
 }
 
 export async function hasPermission(permissionCode: string): Promise<boolean> {
-  const user = await getDbUserBySession();
-  return getEffectivePermissionCodesFromUser(user).has(permissionCode);
+  const effective = await getEffectivePermissionCodes();
+  return effective.has(permissionCode);
 }
 
 export function hasPermissionForUser(user: DbUserWithRbac | null, permissionCode: string): boolean {

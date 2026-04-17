@@ -378,6 +378,7 @@ model FinanceExpenditureSnapshot {
   createdBy     User?         @relation("FinanceSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([schemeId, financialYearId, asOfDate])
+  @@index([financialYearId, asOfDate])
   @@map("finance_expenditure_snapshots")
 }
 
@@ -396,6 +397,7 @@ model FinanceSummaryHead {
   createdBy     User?         @relation("FinanceSummaryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([financialYearId, headCode, asOfDate])
+  @@index([financialYearId, asOfDate])
   @@map("finance_summary_heads")
 }
 
