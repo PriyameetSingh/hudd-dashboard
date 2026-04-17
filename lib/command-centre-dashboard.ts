@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/financial-budget-entries";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
+import type { DbUserWithRbac } from "@/lib/server-rbac";
 import type { FinancialEntry } from "@/types";
 
 export type CommandCentreSchemeSummary = {
@@ -66,11 +67,11 @@ function schemeStatusFromPct(pct: number): CommandCentreSchemeSummary["status"] 
   return "on-track";
 }
 
-export async function getCommandCentreDashboard(): Promise<CommandCentreDashboard> {
+export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): Promise<CommandCentreDashboard> {
   const fyRow = await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" }, select: { id: true } });
 
   const [{ entries, financialYearLabel }, overdueItems, trendRows] = await Promise.all([
-    getFinancialBudgetEntriesOverview(),
+    getFinancialBudgetEntriesOverview(actor),
     prisma.actionItem.findMany({
       where: { status: "OVERDUE" },
       orderBy: { dueDate: "asc" },

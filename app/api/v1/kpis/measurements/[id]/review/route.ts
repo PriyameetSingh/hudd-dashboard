@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { assertKpiReviewerForDefinition, userRoleIdsFromDbUser } from "@/lib/kpi-access";
-import { getDbUserBySession, hasPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { hasPermissionForUser, requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ type Body = {
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("APPROVE_KPI");
+    const actor = await requirePermissionAndDbUser("APPROVE_KPI");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
@@ -37,14 +37,13 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ detail: "Measurement not found" }, { status: 404 });
     }
 
-    const actor = await getDbUserBySession();
     if (!actor) {
       return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
     }
 
     const def = measurement.kpiTarget.kpiDefinition;
     const roleIds = userRoleIdsFromDbUser(actor);
-    const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+    const canManageSchemes = hasPermissionForUser(actor, "MANAGE_SCHEMES");
     await assertKpiReviewerForDefinition(
       { schemeId: def.schemeId, reviewerId: def.reviewerId },
       actor.id,

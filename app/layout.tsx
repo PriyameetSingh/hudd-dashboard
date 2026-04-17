@@ -5,7 +5,7 @@ import MockAuthProvider from "@/components/MockAuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HUDD NEXUS — Odisha Urban Governance",
+  title: "HUDD — Odisha Urban Governance",
   description: "Agentic intelligence platform for Housing & Urban Development Department, Government of Odisha",
 };
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { assertKpiUpdaterForDefinition, userRoleIdsFromDbUser } from "@/lib/kpi-access";
-import { getDbUserBySession, hasPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { hasPermissionForUser, requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ type Body = {
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("ENTER_KPI_DATA");
+    const actor = await requirePermissionAndDbUser("ENTER_KPI_DATA");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
@@ -26,13 +26,12 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
       return NextResponse.json({ detail: "KPI target not found" }, { status: 404 });
     }
 
-    const actor = await getDbUserBySession();
     if (!actor) {
       return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
     }
 
     const roleIds = userRoleIdsFromDbUser(actor);
-    const canManageSchemes = await hasPermission("MANAGE_SCHEMES");
+    const canManageSchemes = hasPermissionForUser(actor, "MANAGE_SCHEMES");
     await assertKpiUpdaterForDefinition(
       { schemeId: target.kpiDefinition.schemeId, assignedToId: target.kpiDefinition.assignedToId },
       actor.id,

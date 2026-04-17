@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ type PostBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAnyPermission("ENTER_FINANCIAL_DATA");
+    const actor = await requireAnyPermissionAndDbUser("ENTER_FINANCIAL_DATA");
 
     const body = (await request.json()) as PostBody;
 
@@ -63,7 +63,6 @@ export async function POST(request: NextRequest) {
       subschemeId = sub.id;
     }
 
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const created = await prisma.financeBudgetSupplement.create({

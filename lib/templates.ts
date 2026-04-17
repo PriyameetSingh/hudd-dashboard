@@ -44,7 +44,7 @@ export function downloadFinancialTemplate() {
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, styledSheet(headers, rows, notes), "Financial Data");
-  download(wb, "HUDD_NEXUS_Financial_Template.xlsx");
+  download(wb, "HUDD_Financial_Template.xlsx");
 }
 
 export function downloadSchemesTemplate() {

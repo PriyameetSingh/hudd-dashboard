@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ type PatchBody = {
 
 export async function PATCH(request: NextRequest) {
   try {
-    await requireAnyPermission("ENTER_FINANCIAL_DATA");
+    const actor = await requireAnyPermissionAndDbUser("ENTER_FINANCIAL_DATA");
 
     const body = (await request.json()) as PatchBody;
 
@@ -48,7 +48,6 @@ export async function PATCH(request: NextRequest) {
       subschemeId = sub.id;
     }
 
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const existing = await prisma.financeBudget.findFirst({
@@ -114,9 +113,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function GET() {
   try {
-    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+    const user = await requireAnyPermissionAndDbUser("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
 
-    const result = await getFinancialBudgetEntriesOverview();
+    const result = await getFinancialBudgetEntriesOverview(user);
     return NextResponse.json(result);
   } catch (error) {
     const auth = toAuthErrorResponse(error);

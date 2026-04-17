@@ -34,8 +34,8 @@ export function getCurrentUser(): MockUser | null {
 export const MOCK_USERS: MockUser[] = [
   {
     id: "acs",
-    name: "Smt. Anjali Sharma",
-    email: "anjali.sharma@hudd.ori",
+    name: "Smt. Ushaa Padhee",
+    email: "usha.padhee@hudd.ori",
     role: UserRole.ACS,
     department: "Housing & Urban Development Department",
     assignedSchemes: ["PMAY-U", "SUJALA", "GARIMA"],

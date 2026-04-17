@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { isValidAssignment, mapSchemeView, parseSponsorshipType } from "@/lib/scheme-api";
-import { getDbUserBySession, requireAnyPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -77,7 +77,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const body = (await request.json()) as Body;
     const code = body.code?.trim().toUpperCase();
@@ -87,8 +87,6 @@ export async function POST(request: NextRequest) {
     if (!code || !name || !body.verticalId || !sponsorshipType) {
       return NextResponse.json({ detail: "code, name, verticalId, and sponsorshipType are required" }, { status: 400 });
     }
-
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

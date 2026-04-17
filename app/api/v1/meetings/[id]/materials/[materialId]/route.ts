@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 import { createSupabaseAdmin, isSupabaseConfigured, MEETING_MATERIALS_BUCKET } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string; materialId: string }> },
 ) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
     const { id: meetingId, materialId } = await ctx.params;
 
@@ -29,7 +29,6 @@ export async function DELETE(
 
     await prisma.meetingMaterial.delete({ where: { id: materialId } });
 
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(_request);
 
     await logAudit(

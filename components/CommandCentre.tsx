@@ -124,35 +124,29 @@ export default function CommandCentre({ setActive }: Props) {
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
-      const data = await fetchPendingApprovalSummaries();
+    void (async () => {
+      const [pendingRes, dashRes] = await Promise.allSettled([
+        fetchPendingApprovalSummaries(),
+        fetchCommandCentreDashboard(),
+      ]);
       if (!active) return;
-      setPendingSummaries(data);
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const d = await fetchCommandCentreDashboard();
-        if (!alive) return;
-        setDashboard(d);
-        setDashError(null);
-      } catch (e) {
-        if (!alive) return;
-        setDashError(e instanceof Error ? e.message : "Failed to load dashboard");
-        setDashboard(null);
-      } finally {
-        if (alive) setDashLoading(false);
+      if (pendingRes.status === "fulfilled") {
+        setPendingSummaries(pendingRes.value);
+      } else {
+        setPendingSummaries([]);
       }
+      if (dashRes.status === "fulfilled") {
+        setDashboard(dashRes.value);
+        setDashError(null);
+      } else {
+        const reason = dashRes.reason;
+        setDashError(reason instanceof Error ? reason.message : "Failed to load dashboard");
+        setDashboard(null);
+      }
+      setDashLoading(false);
     })();
     return () => {
-      alive = false;
+      active = false;
     };
   }, []);
 
@@ -386,7 +380,7 @@ export default function CommandCentre({ setActive }: Props) {
             Department IFMS (₹ Cr) by snapshot date
           </div>
           <div style={{ height: 140 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={140}>
               <AreaChart data={ifmsChartData}>
                 <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
                 <Tooltip

@@ -148,7 +148,7 @@ export default function KpiMeetingPanel() {
               Workflow status mix
             </p>
             <div className="h-[220px] rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={204}>
                 <PieChart>
                   <Pie
                     data={pieData}
@@ -184,7 +184,7 @@ export default function KpiMeetingPanel() {
               Delivery progress (latest measurement)
             </p>
             <div className="h-[220px] rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={204}>
                 <BarChart data={progressData} layout="vertical" margin={{ left: 8, right: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-[var(--border)] opacity-50" />
                   <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-muted)" }} allowDecimals={false} />
@@ -216,7 +216,7 @@ export default function KpiMeetingPanel() {
             KPI rows by vertical (top 10)
           </p>
           <div className="h-[240px] rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={224}>
               <BarChart data={verticalData} margin={{ top: 8, right: 8, left: 4, bottom: 48 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-[var(--border)] opacity-50" />
                 <XAxis

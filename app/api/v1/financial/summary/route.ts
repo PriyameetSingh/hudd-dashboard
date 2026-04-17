@@ -6,7 +6,7 @@ import {
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
 } from "@/lib/finance-year-budget-allocation";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -149,7 +149,7 @@ type Body = {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAnyPermission("ENTER_FINANCIAL_DATA");
+    const actor = await requireAnyPermissionAndDbUser("ENTER_FINANCIAL_DATA");
 
     const body = (await request.json()) as Body;
     const fy = body.financialYearLabel
@@ -161,7 +161,6 @@ export async function POST(request: NextRequest) {
     }
 
     const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     for (const row of body.rows ?? []) {

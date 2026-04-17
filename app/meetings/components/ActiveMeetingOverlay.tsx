@@ -47,7 +47,7 @@ const PANELS: Array<{
   { id: "kpis", label: "KPIs", icon: Target },
   { id: "since_last", label: "Since last meeting", icon: TrendingUp },
   { id: "action_items", label: "Action items", icon: ListTodo },
-  { id: "assistant", label: "Ask NEXUS", icon: Bot },
+  { id: "assistant", label: "Urban Assistant", icon: Bot },
 ];
 
 export default function ActiveMeetingOverlay({

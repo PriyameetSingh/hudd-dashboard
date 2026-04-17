@@ -7,7 +7,7 @@ import {
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
 } from "@/lib/finance-year-budget-allocation";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -26,7 +26,7 @@ function roundMoney(n: number): number {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+    const actor = await requireAnyPermissionAndDbUser("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
 
     const { searchParams } = new URL(request.url);
     const fyLabel = searchParams.get("financialYearLabel");
@@ -44,8 +44,6 @@ export async function GET(request: NextRequest) {
         totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
       });
     }
-
-    const actor = await getDbUserBySession();
     const allocation = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
 
     const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
@@ -98,7 +96,7 @@ type PutBody = {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireAnyPermission("ENTER_FINANCIAL_DATA");
+    const actor = await requireAnyPermissionAndDbUser("ENTER_FINANCIAL_DATA");
 
     const body = (await request.json()) as PutBody;
 
@@ -131,8 +129,6 @@ export async function PUT(request: NextRequest) {
         { status: 400 },
       );
     }
-
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const beforeAlloc = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);

@@ -327,7 +327,7 @@ export const ulbPerformance = [
 export const chatHistory: Array<{ role: "user" | "assistant"; content: string }> = [
   {
     role: "assistant",
-    content: "HUDD NEXUS is online. I have real-time visibility across ₹9,882 Cr in budgets, 33 schemes, and 114 ULBs. What would you like to know?",
+    content: "HUDD dashboard is online. I have real-time visibility across ₹9,882 Cr in budgets, 33 schemes, and 114 ULBs. What would you like to know?",
   },
 ];
 

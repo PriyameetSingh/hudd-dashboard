@@ -4,15 +4,15 @@ import { UserRole } from "@/lib/auth";
 import { asDatabaseUnavailableError } from "@/lib/db-errors";
 import { getFinancialBudgetEntriesOverview, getFinanceSummaryBreakdown } from "@/lib/financial-budget-entries";
 import { getSessionUser } from "@/lib/server-auth";
-import { AuthError, requireAnyPermission } from "@/lib/server-rbac";
+import { AuthError, requireAnyPermissionAndDbUser } from "@/lib/server-rbac";
 import FinancialOverviewClient from "./FinancialOverviewClient";
 
 export default async function FinancialOverviewPage() {
   try {
-    await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+    const rbacUser = await requireAnyPermissionAndDbUser("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
 
     const [budgetData, summary] = await Promise.all([
-      getFinancialBudgetEntriesOverview(),
+      getFinancialBudgetEntriesOverview(rbacUser),
       getFinanceSummaryBreakdown(),
     ]);
 

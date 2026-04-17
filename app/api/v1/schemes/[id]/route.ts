@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { isValidAssignment, mapSchemeView, parseSponsorshipType } from "@/lib/scheme-api";
-import { getDbUserBySession, requireAnyPermission, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 type AssignmentInput = {
   id?: string;
@@ -70,11 +70,10 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await loadScheme(id);
@@ -157,10 +156,9 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await loadScheme(id);

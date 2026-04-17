@@ -2,6 +2,7 @@ import { Prisma, type SponsorshipType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deriveFinancialEntryStatus } from "@/lib/financial-status";
 import { getDashboardPrioritySchemeIds } from "@/lib/scheme-dashboard-priority";
+import type { DbUserWithRbac } from "@/lib/server-rbac";
 import { getDbUserBySession } from "@/lib/server-rbac";
 import type { FinancialEntry, FinanceSummaryRow } from "@/types";
 
@@ -82,13 +83,13 @@ export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakd
   };
 }
 
-export async function getFinancialBudgetEntriesOverview(): Promise<{
+export async function getFinancialBudgetEntriesOverview(actor?: DbUserWithRbac | null): Promise<{
   entries: FinancialEntry[];
   financialYearLabel: string | null;
 }> {
-  const actor = await getDbUserBySession();
-  const roleIds = actor?.userRoles?.map((ur: { roleId: string }) => ur.roleId) ?? [];
-  const priority = await getDashboardPrioritySchemeIds(actor?.id, roleIds);
+  const resolved = actor !== undefined ? actor : await getDbUserBySession();
+  const roleIds = resolved?.userRoles?.map((ur: { roleId: string }) => ur.roleId) ?? [];
+  const priority = await getDashboardPrioritySchemeIds(resolved?.id, roleIds);
 
   const fy = await prisma.financialYear.findFirst({
     orderBy: { endDate: "desc" },

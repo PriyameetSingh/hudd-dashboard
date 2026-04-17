@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ type Body = {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAnyPermission("ENTER_FINANCIAL_DATA");
+    const createdBy = await requireAnyPermissionAndDbUser("ENTER_FINANCIAL_DATA");
 
     const body = (await request.json()) as Body;
 
@@ -54,7 +54,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const createdBy = await getDbUserBySession();
     const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);
     // FA submissions go directly to submitted (approved) — no separate review gate
     const workflowStatus: "draft" | "submitted" = body.workflowStatus === "draft" ? "draft" : "submitted";

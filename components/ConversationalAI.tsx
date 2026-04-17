@@ -125,7 +125,7 @@ export default function ConversationalAI({
       style={rootStyle}
     >
       <div className={embedded ? "mb-3 shrink-0 px-1" : "mb-4"} style={embedded ? undefined : { marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Ask NEXUS</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Ask Assistant</h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
           {variant === "meeting"
             ? "Ask for live HUDD data — financials, KPIs, agenda, actions, or command centre overview"

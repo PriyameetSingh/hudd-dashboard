@@ -241,7 +241,7 @@ export default function KPIsPage() {
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">HUDD NEXUS</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">HUDD</p>
             <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
               {focusScheme ? focusScheme : "KPI Performance Monitor"}
             </h1>
@@ -300,7 +300,7 @@ export default function KPIsPage() {
                 (numeric targets or approved).
               </p>
               <div className="mt-4 h-52 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={208}>
                   <BarChart data={compareBarData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />

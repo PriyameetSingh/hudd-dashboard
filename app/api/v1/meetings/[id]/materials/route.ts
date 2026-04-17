@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 import { assertAllowedMeetingMaterial, sanitizeMeetingFileName } from "@/lib/meeting-materials";
 import { createSupabaseAdmin, isSupabaseConfigured, MEETING_MATERIALS_BUCKET } from "@/lib/supabase/server";
 
@@ -39,7 +39,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
     if (!isSupabaseConfigured()) {
       return NextResponse.json(
@@ -86,7 +86,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ detail: uploadError.message || "Upload failed" }, { status: 502 });
     }
 
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const sortOrder = await prisma.meetingMaterial.count({ where: { meetingId } });

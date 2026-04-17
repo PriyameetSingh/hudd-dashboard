@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ActionItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, hasPermission, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { getDbUserBySession, hasPermissionForUser, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -138,7 +138,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
     const isAssignee = current.assignedToId === actor.id;
     const isReviewer = current.reviewerId === actor.id;
-    const canApprove = await hasPermission("APPROVE_ACTION_ITEMS");
+    const canApprove = hasPermissionForUser(actor, "APPROVE_ACTION_ITEMS");
 
     if (body.reviewerDecision === "approve" || body.reviewerDecision === "reject") {
       if (!isReviewer && !canApprove) {
@@ -178,7 +178,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
 
     if (body.assignedToUserCode !== undefined || body.reviewerUserCode !== undefined) {
-      const canReassign = await hasPermission("UPDATE_ACTION_ITEMS");
+      const canReassign = hasPermissionForUser(actor, "UPDATE_ACTION_ITEMS");
       if (!canReassign) {
         return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
       }
@@ -230,7 +230,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
 
     if (body.status || (body.note && body.note.trim())) {
-      const canUpdate = isAssignee || (await hasPermission("UPDATE_ACTION_ITEMS"));
+      const canUpdate = isAssignee || hasPermissionForUser(actor, "UPDATE_ACTION_ITEMS");
       if (!canUpdate) {
         return NextResponse.json({ detail: "Forbidden" }, { status: 403 });
       }

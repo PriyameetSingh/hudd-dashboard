@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -53,11 +53,10 @@ type Body = {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
     const body = (await request.json()) as Body;
     const meetingDate = new Date(`${body.meetingDate}T00:00:00.000Z`);
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const meeting = await prisma.dashboardMeeting.create({

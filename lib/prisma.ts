@@ -4,6 +4,7 @@ declare global {
   var prisma: PrismaClient | undefined;
 }
 
+/** Use the Supabase pooler URL (port 6543, `?pgbouncer=true`) for serverless if you see slow connects or pool exhaustion. */
 const datasourceUrl = process.env.DATABASE_URL;
 
 export const prisma =

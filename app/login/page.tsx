@@ -2,8 +2,8 @@ import { Metadata } from "next";
 import LoginGrid from "@/components/LoginGrid";
 
 export const metadata: Metadata = {
-  title: "HUDD NEXUS — Login",
-  description: "Role-based entry to the HUDD NEXUS dashboard",
+  title: "HUDD Login",
+  description: "Role-based entry to the HUDD dashboard",
 };
 
 export default function Page() {
@@ -13,7 +13,7 @@ export default function Page() {
         <div className="mx-auto w-full max-w-5xl space-y-10 rounded-3xl border border-white/10 bg-white/5 p-10 shadow-[0_0_60px_rgba(0,0,0,0.45)] backdrop-blur">
           <header className="space-y-3 text-center">
             <p className="text-xs uppercase tracking-[0.5em] text-slate-300">Government of Odisha</p>
-            <h1 className="text-4xl font-semibold tracking-[0.15em]">HUDD NEXUS</h1>
+            <h1 className="text-4xl font-semibold tracking-[0.15em]">HUDD </h1>
             <p className="text-sm text-slate-300">Select your role to continue (Prototype Mode)</p>
           </header>
           <LoginGrid />

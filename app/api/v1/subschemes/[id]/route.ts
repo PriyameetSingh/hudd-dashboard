@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -19,11 +19,10 @@ type Body = {
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await prisma.subscheme.findUnique({ where: { id } });
@@ -71,10 +70,9 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await prisma.subscheme.findUnique({ where: { id } });

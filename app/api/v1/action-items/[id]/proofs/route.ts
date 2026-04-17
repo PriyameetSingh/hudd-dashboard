@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ActionItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ type Body = {
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAnyPermission("UPLOAD_PROOF", "UPDATE_ACTION_ITEMS");
+    const actor = await requireAnyPermissionAndDbUser("UPLOAD_PROOF", "UPDATE_ACTION_ITEMS");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
@@ -22,8 +22,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!actionItem) {
       return NextResponse.json({ detail: "Action item not found" }, { status: 404 });
     }
-
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
   const existingFile = await prisma.file.findFirst({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -12,9 +12,7 @@ type Body = {
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ userCode: string }> }) {
   try {
-    await requirePermission("MANAGE_PERMISSIONS");
-
-    const actor = await getDbUserBySession();
+    const actor = await requirePermissionAndDbUser("MANAGE_PERMISSIONS");
     const auditContext = getAuditRequestContext(request);
     const { userCode } = await ctx.params;
     const body = (await request.json()) as Body;

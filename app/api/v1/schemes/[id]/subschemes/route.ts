@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requirePermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,7 @@ type Body = {
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as Body;
@@ -34,8 +34,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!scheme) {
       return NextResponse.json({ detail: "Scheme not found" }, { status: 404 });
     }
-
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const created = await prisma.subscheme.create({

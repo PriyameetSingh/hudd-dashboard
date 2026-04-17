@@ -427,7 +427,7 @@ export default function FinancialOverviewClient({
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Department IFMS trend</p>
             <p className="text-sm text-[var(--text-muted)]">Sum of snapshot rows by as-of date (₹ Cr).</p>
             <div className="mt-4 h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={224}>
                 <LineChart data={timeseries.map((t) => ({ ...t, label: t.asOfDate.slice(5) }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
@@ -451,7 +451,7 @@ export default function FinancialOverviewClient({
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Summary heads — IFMS baseline vs current</p>
             <div className="mt-4 h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={headChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />

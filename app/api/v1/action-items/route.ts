@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ActionItemPriority, ActionItemStatus, ActionItemType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -114,10 +114,9 @@ type CreateBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS");
 
     const body = (await request.json()) as CreateBody;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     let scheme = null;

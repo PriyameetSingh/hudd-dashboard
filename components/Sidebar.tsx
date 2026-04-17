@@ -284,15 +284,16 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--sidebar-border)] flex flex-col sticky top-0">
-      <div className="px-6 py-5 border-b border-[var(--sidebar-border)]">
-        <div className="text-sm font-semibold tracking-[0.6em] text-[var(--sidebar-text-muted)]">HUDD NEXUS</div>
-        <div className="text-xs uppercase text-[var(--sidebar-text-muted)] mt-1">Government of Odisha</div>
-        {user && (
+      <div className="px-6 py-5 border-b border-[var(--sidebar-border)] items-center justify-center flex">
+        {/* <div className="text-sm font-semibold tracking-[0.6em] text-[var(--sidebar-text-muted)]">HUDD</div> */}
+        {/* <div className="text-xs uppercase text-[var(--sidebar-text-muted)] mt-1">Government of Odisha</div> */}
+        <img src="/logo.png" alt="HUDD Logo" className="w-24 h-24" />
+        {/* {user && (
           <div className="mt-3 flex flex-col gap-1">
             <div className="text-[13px] font-bold text-[var(--sidebar-text-primary)]">{user.name}</div>
             <div className="flex items-center gap-1">{roleBadge}</div>
           </div>
-        )}
+        )} */}
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1 px-2">

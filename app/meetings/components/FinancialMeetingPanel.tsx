@@ -133,7 +133,7 @@ export default function FinancialMeetingPanel({ financialYearLabel }: { financia
             By budget category — IFMS (₹ Cr)
           </p>
           <div className="h-[220px] w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={204}>
               <BarChart data={barData} margin={{ top: 8, right: 8, left: 4, bottom: 36 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-[var(--border)] opacity-50" />
                 <XAxis
@@ -175,7 +175,7 @@ export default function FinancialMeetingPanel({ financialYearLabel }: { financia
             IFMS trend by snapshot date (₹ Cr)
           </p>
           <div className="h-[200px] w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={184}>
               <LineChart data={lineData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-[var(--border)] opacity-50" />
                 <XAxis dataKey="asOfDate" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermission, requireAnyPermissionAndDbUser, requirePermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -58,11 +58,10 @@ type PatchBody = {
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
     const body = (await request.json()) as PatchBody;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await prisma.dashboardMeeting.findUnique({ where: { id } });
@@ -101,10 +100,9 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAnyPermission("MANAGE_SCHEMES");
+    const actor = await requirePermissionAndDbUser("MANAGE_SCHEMES");
 
     const { id } = await ctx.params;
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const before = await prisma.dashboardMeeting.findUnique({ where: { id } });

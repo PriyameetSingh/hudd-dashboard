@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
-import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
+import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
@@ -11,7 +11,7 @@ type Body = {
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAnyPermission("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
+    const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
     const { id: meetingId } = await ctx.params;
     const body = (await request.json()) as Body;
@@ -24,8 +24,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!meeting) {
       return NextResponse.json({ detail: "Meeting not found" }, { status: 404 });
     }
-
-    const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
     const created = await prisma.meetingTopic.create({
