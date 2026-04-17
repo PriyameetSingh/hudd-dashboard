@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { fetchFinanceSummary } from "@/src/lib/services/financialService";
 import type { MeetingListItem } from "@/src/lib/services/meetingService";
+import { getFinancialYear } from "../meetingUtils";
 
 export default function SinceLastMeetingPanel({
   meeting,
@@ -51,9 +52,10 @@ export default function SinceLastMeetingPanel({
           return;
         }
 
+        const fyLabel = getFinancialYear(meeting.meetingDate);
         const [baseSum, curSum] = await Promise.all([
-          fetchFinanceSummary({ asOfDate: baseline }),
-          fetchFinanceSummary({ asOfDate: current }),
+          fetchFinanceSummary({ asOfDate: baseline, financialYearLabel: fyLabel }),
+          fetchFinanceSummary({ asOfDate: current, financialYearLabel: fyLabel }),
         ]);
         if (!alive) return;
         setFy(curSum.financialYearLabel);
@@ -76,7 +78,7 @@ export default function SinceLastMeetingPanel({
     return () => {
       alive = false;
     };
-  }, [prevMeeting]);
+  }, [prevMeeting, meeting.meetingDate]);
 
   if (!prevMeeting) {
     return (

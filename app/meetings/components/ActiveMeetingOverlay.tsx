@@ -13,7 +13,10 @@ import {
   Target,
   TrendingUp,
   ListTodo,
+  CirclePlus,
+  Bot,
 } from "lucide-react";
+import { getCurrentUser, hasPermission, Permission } from "@/lib/auth";
 import type { MeetingListItem } from "@/src/lib/services/meetingService";
 import { getFinancialYear } from "../meetingUtils";
 import PresentationsPanel from "./PresentationsPanel";
@@ -21,6 +24,8 @@ import FinancialMeetingPanel from "./FinancialMeetingPanel";
 import KpiMeetingPanel from "./KpiMeetingPanel";
 import SinceLastMeetingPanel from "./SinceLastMeetingPanel";
 import ActionItemsMeetingPanel from "./ActionItemsMeetingPanel";
+import CreateActionItemMeetingModal from "./CreateActionItemMeetingModal";
+import ConversationalAI from "@/components/ConversationalAI";
 
 export type MeetingPanelId =
   | "agenda"
@@ -28,7 +33,8 @@ export type MeetingPanelId =
   | "financial"
   | "kpis"
   | "since_last"
-  | "action_items";
+  | "action_items"
+  | "assistant";
 
 const PANELS: Array<{
   id: MeetingPanelId;
@@ -41,16 +47,19 @@ const PANELS: Array<{
   { id: "kpis", label: "KPIs", icon: Target },
   { id: "since_last", label: "Since last meeting", icon: TrendingUp },
   { id: "action_items", label: "Action items", icon: ListTodo },
+  { id: "assistant", label: "Ask NEXUS", icon: Bot },
 ];
 
 export default function ActiveMeetingOverlay({
   meeting,
   allMeetings,
   onClose,
+  onActionItemCreated,
 }: {
   meeting: MeetingListItem;
   allMeetings: MeetingListItem[];
   onClose: () => void;
+  onActionItemCreated?: () => void | Promise<void>;
 }) {
   const materials = meeting.materials ?? [];
   const [panel, setPanel] = useState<MeetingPanelId>(() =>
@@ -62,6 +71,9 @@ export default function ActiveMeetingOverlay({
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [showCreateActionItem, setShowCreateActionItem] = useState(false);
+
+  const canCreateActionItem = hasPermission(getCurrentUser(), Permission.CREATE_ACTION_ITEMS);
 
   useEffect(() => {
     const t = setInterval(() => setElapsed((prev) => prev + 1), 1000);
@@ -100,13 +112,25 @@ export default function ActiveMeetingOverlay({
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3 md:gap-4">
             <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2">
               <Clock size={15} className="shrink-0 text-[var(--accent)]" aria-hidden />
               <span className="font-mono text-sm font-semibold tabular-nums text-[var(--text-primary)]">
                 {fmtTime(elapsed)}
               </span>
             </div>
+
+            {canCreateActionItem && (
+              <button
+                id="btn-meeting-quick-action-item"
+                type="button"
+                onClick={() => setShowCreateActionItem(true)}
+                className="flex items-center gap-2 rounded-lg border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-3 py-2 text-sm font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/18"
+              >
+                <CirclePlus size={16} aria-hidden />
+                <span className="hidden sm:inline">Action item</span>
+              </button>
+            )}
 
             <button
               id="btn-end-meeting"
@@ -192,8 +216,8 @@ export default function ActiveMeetingOverlay({
         )}
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg-primary)]/80">
-          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-8">
-            {effectivePanel !== "agenda" && (
+          <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-8">
+            {effectivePanel !== "agenda" && effectivePanel !== "assistant" && (
               <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">{panelLabel}</p>
             )}
 
@@ -268,7 +292,10 @@ export default function ActiveMeetingOverlay({
 
             {effectivePanel === "financial" && (
               <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 shadow-sm sm:p-6">
-                <FinancialMeetingPanel />
+                <FinancialMeetingPanel
+                  key={getFinancialYear(meeting.meetingDate)}
+                  financialYearLabel={getFinancialYear(meeting.meetingDate)}
+                />
               </div>
             )}
 
@@ -289,6 +316,23 @@ export default function ActiveMeetingOverlay({
                 <ActionItemsMeetingPanel meeting={meeting} />
               </div>
             )}
+
+            {effectivePanel === "assistant" && (
+              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+                <div className="flex min-h-[min(70vh,560px)] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 shadow-sm sm:p-4">
+                  <ConversationalAI
+                    variant="meeting"
+                    embedded
+                    meetingContext={{
+                      meetingId: meeting.id,
+                      meetingDate: meeting.meetingDate,
+                      title: meeting.title ?? null,
+                      financialYearLabel: getFinancialYear(meeting.meetingDate),
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -299,6 +343,16 @@ export default function ActiveMeetingOverlay({
           to   { opacity: 1; transform: translateX(0); }
         }
       `}</style>
+
+      {canCreateActionItem && (
+        <CreateActionItemMeetingModal
+          open={showCreateActionItem}
+          onClose={() => setShowCreateActionItem(false)}
+          meetingId={meeting.id}
+          meetingLabel={`${meeting.meetingDate}${meeting.title ? ` — ${meeting.title}` : ""}`}
+          onCreated={onActionItemCreated}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import {
+  FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
+  FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+} from "@/lib/finance-year-budget-allocation";
+import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
 import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -28,12 +33,20 @@ export async function GET(request: NextRequest) {
     const asOfDateParam = searchParams.get("asOfDate");
     const fyLabel = searchParams.get("financialYearLabel");
 
-    const fy = fyLabel
+    let fy = fyLabel
       ? await prisma.financialYear.findUnique({ where: { label: fyLabel } })
       : await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
+    if (!fy && fyLabel) {
+      fy = await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" } });
+    }
 
     if (!fy) {
-      return NextResponse.json({ rows: [], totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 } });
+      return NextResponse.json({
+        financialYearLabel: null,
+        asOfDate: null,
+        rows: [],
+        totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+      });
     }
 
     const asOfDate = asOfDateParam
@@ -48,13 +61,56 @@ export async function GET(request: NextRequest) {
       orderBy: { headCode: "asc" },
     });
 
-    const rows = heads.map((h) => ({
+    let rows = heads.map((h) => ({
       headCode: h.headCode,
       label: HEAD_LABELS[h.headCode] ?? h.headCode,
       budgetEstimateCr: toNumber(h.budgetEstimateCr),
       soExpenditureCr: toNumber(h.soExpenditureCr),
       ifmsExpenditureCr: toNumber(h.ifmsExpenditureCr),
     }));
+
+    let responseAsOf: string | null = asOfDate?.toISOString().slice(0, 10) ?? null;
+
+    if (rows.length === 0) {
+      if (!asOfDate) {
+        const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+        const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
+        rows = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
+          const row = lineByCategory.get(category);
+          return {
+            headCode: category,
+            label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
+            budgetEstimateCr: row ? toNumber(row.budgetEstimateCr) : 0,
+            soExpenditureCr: row ? toNumber(row.soExpenditureCr) : 0,
+            ifmsExpenditureCr: row ? toNumber(row.ifmsExpenditureCr) : 0,
+          };
+        });
+        responseAsOf = null;
+      } else {
+        const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+        const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
+        const budgetEstimateCr = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.reduce(
+          (acc, category) => acc + toNumber(lineByCategory.get(category)?.budgetEstimateCr),
+          0,
+        );
+        const snap = await prisma.financeExpenditureSnapshot.aggregate({
+          where: { financialYearId: fy.id, asOfDate },
+          _sum: { soExpenditureCr: true, ifmsExpenditureCr: true },
+        });
+        rows = [];
+        const totals = {
+          budgetEstimateCr,
+          soExpenditureCr: toNumber(snap._sum.soExpenditureCr),
+          ifmsExpenditureCr: toNumber(snap._sum.ifmsExpenditureCr),
+        };
+        return NextResponse.json({
+          financialYearLabel: fy.label,
+          asOfDate: responseAsOf,
+          rows,
+          totals,
+        });
+      }
+    }
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -65,7 +121,12 @@ export async function GET(request: NextRequest) {
       { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
     );
 
-    return NextResponse.json({ financialYearLabel: fy.label, asOfDate: asOfDate?.toISOString().slice(0, 10) ?? null, rows, totals });
+    return NextResponse.json({
+      financialYearLabel: fy.label,
+      asOfDate: responseAsOf,
+      rows,
+      totals,
+    });
   } catch (error) {
     const auth = toAuthErrorResponse(error);
     if (auth) {

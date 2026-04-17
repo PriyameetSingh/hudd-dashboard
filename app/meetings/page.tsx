@@ -50,6 +50,21 @@ export default function MeetingsPage() {
     }
   }, []);
 
+  const refreshMeetingContext = useCallback(async () => {
+    try {
+      const data = await fetchMeetings();
+      const normalized = normalizeMeetings(data);
+      setMeetings(normalized);
+      setActiveMeeting((prev) => {
+        if (!prev) return null;
+        return normalized.find((m) => m.id === prev.id) ?? prev;
+      });
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load meetings");
+    }
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -65,6 +80,7 @@ export default function MeetingsPage() {
         meeting={activeMeeting}
         allMeetings={meetings}
         onClose={() => setActiveMeeting(null)}
+        onActionItemCreated={refreshMeetingContext}
       />
     );
   }

@@ -47,7 +47,7 @@ export async function submitFinancialSnapshot(input: {
 }
 
 export async function fetchFinanceSummary(params?: { asOfDate?: string; financialYearLabel?: string }): Promise<{
-  financialYearLabel: string;
+  financialYearLabel: string | null;
   asOfDate: string | null;
   rows: FinanceSummaryRow[];
   totals: { budgetEstimateCr: number; soExpenditureCr: number; ifmsExpenditureCr: number };
@@ -57,6 +57,17 @@ export async function fetchFinanceSummary(params?: { asOfDate?: string; financia
   if (params?.financialYearLabel) search.set("financialYearLabel", params.financialYearLabel);
   const q = search.toString();
   const response = await fetch(`/api/v1/financial/summary${q ? `?${q}` : ""}`, { cache: "no-store" });
+  return parseResponse(response);
+}
+
+export async function fetchIfmsTimeseries(params?: { financialYearLabel?: string }): Promise<{
+  financialYearLabel: string | null;
+  points: { asOfDate: string; ifmsCr: number }[];
+}> {
+  const search = new URLSearchParams();
+  if (params?.financialYearLabel) search.set("financialYearLabel", params.financialYearLabel);
+  const q = search.toString();
+  const response = await fetch(`/api/v1/financial/ifms-timeseries${q ? `?${q}` : ""}`, { cache: "no-store" });
   return parseResponse(response);
 }
 

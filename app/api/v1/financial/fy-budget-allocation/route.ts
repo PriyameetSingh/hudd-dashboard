@@ -6,6 +6,7 @@ import {
   FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
 } from "@/lib/finance-year-budget-allocation";
+import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
 import { getDbUserBySession, requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -21,40 +22,6 @@ function toNumber(value: unknown): number {
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
-}
-
-async function ensureAllocationWithLines(financialYearId: string, createdById: string | null) {
-  let allocation = await prisma.financeYearBudgetAllocation.findUnique({
-    where: { financialYearId },
-  });
-  if (!allocation) {
-    allocation = await prisma.financeYearBudgetAllocation.create({
-      data: {
-        financialYearId,
-        totalBudgetCr: 0,
-        createdById,
-      },
-    });
-  }
-  for (const category of FINANCE_YEAR_BUDGET_CATEGORY_ORDER) {
-    await prisma.financeYearBudgetCategoryLine.upsert({
-      where: {
-        allocationId_category: { allocationId: allocation.id, category },
-      },
-      update: {},
-      create: {
-        allocationId: allocation.id,
-        category,
-        budgetEstimateCr: 0,
-        soExpenditureCr: 0,
-        ifmsExpenditureCr: 0,
-      },
-    });
-  }
-  return prisma.financeYearBudgetAllocation.findUniqueOrThrow({
-    where: { id: allocation.id },
-    include: { categoryLines: true },
-  });
 }
 
 export async function GET(request: NextRequest) {
@@ -79,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
 
     const actor = await getDbUserBySession();
-    const allocation = await ensureAllocationWithLines(fy.id, actor?.id ?? null);
+    const allocation = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
 
     const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
     const lines = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
@@ -168,7 +135,7 @@ export async function PUT(request: NextRequest) {
     const actor = await getDbUserBySession();
     const auditContext = getAuditRequestContext(request);
 
-    const beforeAlloc = await ensureAllocationWithLines(fy.id, actor?.id ?? null);
+    const beforeAlloc = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
 
     await prisma.$transaction(async (tx) => {
       await tx.financeYearBudgetAllocation.update({
