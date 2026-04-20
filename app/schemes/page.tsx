@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import AddKpiModal from "@/components/schemes/AddKpiModal";
 import SchemeFormModal from "@/components/schemes/SchemeFormModal";
+import SchemeModal from "@/components/schemes/SchemeModal";
 import { useRequireAuth } from "@/src/lib/route-guards";
 import { fetchSchemesOverview } from "@/src/lib/services/schemeService";
 import { SchemeOverview, SchemeReferenceData } from "@/types";
@@ -31,6 +32,7 @@ export default function SchemesPage() {
   const [schemeFormOpen, setSchemeFormOpen] = useState(false);
   const [schemeFormTarget, setSchemeFormTarget] = useState<SchemeOverview | null>(null);
   const [kpiModalScheme, setKpiModalScheme] = useState<SchemeOverview | null>(null);
+  const [schemeProgressModal, setSchemeProgressModal] = useState<SchemeOverview | null>(null);
 
   const canManageSchemes = permissions.includes("MANAGE_SCHEMES");
 
@@ -157,7 +159,18 @@ export default function SchemesPage() {
                           </button>
                         </td>
                         <td className="px-4 py-3 text-[var(--text-muted)]">{s.code}</td>
-                        <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{s.name}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-[var(--text-primary)]">{s.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSchemeProgressModal(s)}
+                              className="w-fit text-left text-[11px] text-[var(--accent)] underline-offset-2 hover:underline"
+                            >
+                              Progress & analytics
+                            </button>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-[var(--text-muted)]">{s.verticalName}</td>
                         <td className="px-4 py-3 text-[var(--text-muted)]">{s.kpis.length}</td>
                         <td className="px-4 py-3 text-[var(--text-muted)]">
@@ -286,6 +299,21 @@ export default function SchemesPage() {
           scheme={kpiModalScheme}
           users={reference?.users ?? []}
           onSaved={reloadOverview}
+        />
+
+        <SchemeModal
+          open={schemeProgressModal !== null}
+          onClose={() => setSchemeProgressModal(null)}
+          scheme={
+            schemeProgressModal
+              ? {
+                  id: schemeProgressModal.id,
+                  code: schemeProgressModal.code,
+                  name: schemeProgressModal.name,
+                  verticalName: schemeProgressModal.verticalName,
+                }
+              : null
+          }
         />
       </div>
     </AppShell>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import SchemeModal from "@/components/schemes/SchemeModal";
 import { UserRole } from "@/lib/auth";
 import { fetchFinancialBudgets } from "@/src/lib/services/financialService";
 import type { FinancialEntry } from "@/types";
@@ -123,6 +124,7 @@ export default function SchemesBoardClient({ userRole }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [expandedSchemeId, setExpandedSchemeId] = useState<string | null>(null);
+  const [schemeModalEntry, setSchemeModalEntry] = useState<FinancialEntry | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -283,43 +285,21 @@ export default function SchemesBoardClient({ userRole }: Props) {
                       const expanded =
                         hasSubs && expandedSchemeId === entry.id;
 
-                      const cardClass = `rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm ${ui.cardBorder} ${
-                        hasSubs
-                          ? "cursor-pointer outline-none ring-offset-2 ring-offset-[var(--bg-document)] focus-visible:ring-2 focus-visible:ring-[var(--text-secondary)]"
-                          : ""
-                      }`;
+                      const cardClass = `cursor-pointer rounded-xl border bg-[var(--bg-document)] p-3 shadow-sm outline-none ring-offset-2 ring-offset-[var(--bg-document)] focus-visible:ring-2 focus-visible:ring-[var(--text-secondary)] ${ui.cardBorder}`;
 
                       return (
                         <div
                           key={entry.id}
-                          role={hasSubs ? "button" : undefined}
-                          tabIndex={hasSubs ? 0 : undefined}
-                          aria-expanded={hasSubs ? expanded : undefined}
-                          aria-label={
-                            hasSubs
-                              ? `${entry.scheme}, ${expanded ? "expanded" : "collapsed"}. Press Enter or Space to toggle.`
-                              : undefined
-                          }
-                          onClick={
-                            hasSubs
-                              ? () =>
-                                  setExpandedSchemeId((id) =>
-                                    id === entry.id ? null : entry.id,
-                                  )
-                              : undefined
-                          }
-                          onKeyDown={
-                            hasSubs
-                              ? (e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    setExpandedSchemeId((id) =>
-                                      id === entry.id ? null : entry.id,
-                                    );
-                                  }
-                                }
-                              : undefined
-                          }
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open scheme details for ${entry.scheme}`}
+                          onClick={() => setSchemeModalEntry(entry)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSchemeModalEntry(entry);
+                            }
+                          }}
                           className={cardClass}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -364,12 +344,23 @@ export default function SchemesBoardClient({ userRole }: Props) {
                           </div>
 
                           {hasSubs && (
-                            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-2">
-                              <span
+                            <div
+                              className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border)] pt-2"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
                                 className={`text-[11px] font-medium ${ui.headerText} hover:underline`}
+                                aria-expanded={expanded}
+                                onClick={() =>
+                                  setExpandedSchemeId((id) =>
+                                    id === entry.id ? null : entry.id,
+                                  )
+                                }
                               >
                                 {expanded ? "Collapse ∨" : "View sub-schemes >"}
-                              </span>
+                              </button>
                             </div>
                           )}
 
@@ -430,6 +421,21 @@ export default function SchemesBoardClient({ userRole }: Props) {
             })}
           </div>
         )}
+
+        <SchemeModal
+          open={schemeModalEntry !== null}
+          onClose={() => setSchemeModalEntry(null)}
+          scheme={
+            schemeModalEntry
+              ? {
+                  id: schemeModalEntry.schemeId ?? schemeModalEntry.id,
+                  code: schemeModalEntry.id,
+                  name: schemeModalEntry.scheme,
+                  verticalName: schemeModalEntry.vertical,
+                }
+              : null
+          }
+        />
       </div>
     </AppShell>
   );

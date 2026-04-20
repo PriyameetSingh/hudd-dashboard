@@ -91,3 +91,63 @@ export async function addSubscheme(schemeId: string, input: { code: string; name
   });
   await parseResponse<{ subscheme?: unknown }>(response);
 }
+
+export type SchemeModalPayload = {
+  scheme: { id: string; code: string; name: string; verticalName: string };
+  financialYearLabel: string | null;
+  expenditure: {
+    financialYearLabel: string | null;
+    annualBudgetCr: number;
+    soExpenditureCr: number;
+    ifmsExpenditureCr: number;
+    asOfDate: string | null;
+  } | null;
+  ifmsTimeseries: Array<{ asOfDate: string; ifmsCr: number; utilisationPct: number | null }>;
+  subschemeFinancial: Array<{
+    id: string;
+    code: string;
+    name: string;
+    budgetCr: number;
+    ifmsCr: number;
+    utilisationPct: number | null;
+    asOfDate: string | null;
+  }>;
+  kpi: {
+    rows: Array<{
+      id: string;
+      description: string;
+      kpiType: string;
+      category: string;
+      subschemeId: string | null;
+      subschemeCode: string | null;
+      subschemeName: string | null;
+      denominator: number | null;
+      latest: {
+        measuredAt: string;
+        progressStatus: string;
+        achievementPct: number | null;
+        workflowStatus: string;
+        remarks: string | null;
+      } | null;
+      measurementSeries: Array<{
+        measuredAt: string;
+        achievementPct: number | null;
+        progressStatus: string;
+      }>;
+    }>;
+    progressCounts: { on_track: number; delayed: number; overdue: number };
+    weeklyConsolidated: Array<{ weekStart: string; avgAchievementPct: number | null }>;
+    weeklyBySubscheme: Array<{
+      subschemeId: string | null;
+      subschemeCode: string | null;
+      subschemeName: string;
+      series: Array<{ weekStart: string; avgAchievementPct: number | null }>;
+    }>;
+  };
+  updates: Array<{ at: string; kind: "kpi" | "financial"; title: string; detail: string | null }>;
+};
+
+export async function fetchSchemeModalData(schemeId: string): Promise<SchemeModalPayload> {
+  const response = await fetch(`/api/v1/schemes/${schemeId}/scheme-modal`, { cache: "no-store" });
+  return parseResponse<SchemeModalPayload>(response);
+}

@@ -6,6 +6,8 @@ import type { FinancialEntry } from "@/types";
 
 export type CommandCentreSchemeSummary = {
   id: string;
+  /** Prisma scheme UUID (for APIs such as scheme modal); entry `id` is scheme code */
+  schemeId: string;
   scheme: string;
   vertical: string;
   budgetCr: number;
@@ -113,6 +115,7 @@ export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): 
     const pct = schemePct(e);
     return {
       id: e.id,
+      schemeId: e.schemeId ?? e.id,
       scheme: e.scheme,
       vertical: e.vertical || "—",
       budgetCr,

@@ -12,6 +12,7 @@ import ApprovalCard from "@/src/components/ui/ApprovalCard";
 import { PendingApprovalSummary } from "@/types";
 import AiAlertsCard from "@/components/command-centre/AiAlertsCard";
 import CommandCentreSparkLine from "@/components/command-centre/CommandCentreSparkLine";
+import SchemeModal from "@/components/schemes/SchemeModal";
 
 function statusColor(s: string) {
   if (s === "critical") return "var(--alert-critical)";
@@ -117,6 +118,12 @@ export default function CommandCentre({ setActive }: Props) {
   const [dashboard, setDashboard] = useState<CommandCentreDashboard | null>(null);
   const [dashError, setDashError] = useState<string | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
+  const [schemeModal, setSchemeModal] = useState<{
+    id: string;
+    code: string;
+    name: string;
+    verticalName: string;
+  } | null>(null);
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -417,7 +424,14 @@ export default function CommandCentre({ setActive }: Props) {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setActive("schemes")}
+                onClick={() =>
+                  setSchemeModal({
+                    id: s.schemeId,
+                    code: s.id,
+                    name: s.scheme,
+                    verticalName: s.vertical,
+                  })
+                }
                 style={{
                   background: "var(--bg-card)",
                   border: "1px solid var(--border)",
@@ -683,6 +697,12 @@ export default function CommandCentre({ setActive }: Props) {
           </div>
         )}
       </div>
+
+      <SchemeModal
+        open={schemeModal !== null}
+        onClose={() => setSchemeModal(null)}
+        scheme={schemeModal}
+      />
     </div>
   );
 }
