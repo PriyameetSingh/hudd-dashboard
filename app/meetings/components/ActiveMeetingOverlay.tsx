@@ -77,14 +77,14 @@ function AgendaTodoPanel({
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">Agenda</p>
+        <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--alert-critical)]">Important Topics for discussion</p>
         <span className="rounded-md bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
-          {topics.length} topic{topics.length !== 1 ? "s" : ""}
+          {topics.length}
         </span>
       </div>
-      <p className={`mb-2 text-[var(--text-muted)] ${compact ? "text-[10px] leading-snug" : "text-xs"}`}>
-        Tick when discussed. New topics are saved to this meeting.
-      </p>
+      {/* <p className={`mb-2 text-[var(--text-muted)] ${compact ? "text-[10px] leading-snug" : "text-xs"}`}>
+        
+      </p> */}
 
       <ul className={`space-y-0.5 ${compact ? "max-h-[min(28vh,220px)]" : ""} overflow-y-auto pr-0.5`}>
         {topics.map((t, idx) => {
