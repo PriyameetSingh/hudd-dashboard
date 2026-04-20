@@ -85,3 +85,16 @@ export async function updateMeeting(
   });
   await parseResponse<{ ok: boolean }>(response);
 }
+
+export async function addMeetingTopic(
+  meetingId: string,
+  topic: string,
+): Promise<{ id: string; topic: string }> {
+  const response = await fetch(`/api/v1/meetings/${meetingId}/topics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic }),
+  });
+  const data = await parseResponse<{ topic: { id: string; topic: string } }>(response);
+  return data.topic;
+}

@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
-  ChevronRight,
+  Circle,
   Clock,
-  LayoutGrid,
-  MessageCircle,
+  Plus,
   X,
   FileText,
   LineChart,
@@ -17,7 +16,7 @@ import {
   Bot,
 } from "lucide-react";
 import { getCurrentUser, hasPermission, Permission } from "@/lib/auth";
-import type { MeetingListItem } from "@/src/lib/services/meetingService";
+import { addMeetingTopic, type MeetingListItem } from "@/src/lib/services/meetingService";
 import { getFinancialYear } from "../meetingUtils";
 import PresentationsPanel from "./PresentationsPanel";
 import FinancialMeetingPanel from "./FinancialMeetingPanel";
@@ -28,7 +27,6 @@ import CreateActionItemMeetingModal from "./CreateActionItemMeetingModal";
 import ConversationalAI from "@/components/ConversationalAI";
 
 export type MeetingPanelId =
-  | "agenda"
   | "presentations"
   | "financial"
   | "kpis"
@@ -39,9 +37,8 @@ export type MeetingPanelId =
 const PANELS: Array<{
   id: MeetingPanelId;
   label: string;
-  icon: typeof LayoutGrid;
+  icon: typeof FileText;
 }> = [
-  { id: "agenda", label: "Agenda", icon: LayoutGrid },
   { id: "presentations", label: "Presentations", icon: FileText },
   { id: "financial", label: "Financial", icon: LineChart },
   { id: "kpis", label: "KPIs", icon: Target },
@@ -50,30 +47,176 @@ const PANELS: Array<{
   { id: "assistant", label: "Urban Assistant", icon: Bot },
 ];
 
+type MeetingTopicRow = { id: string; topic: string };
+
+function AgendaTodoPanel({
+  topics,
+  discussedIds,
+  onToggleDiscussed,
+  newTopicText,
+  onNewTopicTextChange,
+  onAddTopic,
+  addingTopic,
+  topicAddError,
+  compact,
+  className = "",
+}: {
+  topics: MeetingTopicRow[];
+  discussedIds: Set<string>;
+  onToggleDiscussed: (id: string) => void;
+  newTopicText: string;
+  onNewTopicTextChange: (v: string) => void;
+  onAddTopic: () => void;
+  addingTopic?: boolean;
+  topicAddError?: string | null;
+  compact?: boolean;
+  className?: string;
+}) {
+  const canSubmit = newTopicText.trim().length > 0 && !addingTopic;
+
+  return (
+    <div className={className}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">Agenda</p>
+        <span className="rounded-md bg-[var(--bg-primary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+          {topics.length} topic{topics.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <p className={`mb-2 text-[var(--text-muted)] ${compact ? "text-[10px] leading-snug" : "text-xs"}`}>
+        Tick when discussed. New topics are saved to this meeting.
+      </p>
+
+      <ul className={`space-y-0.5 ${compact ? "max-h-[min(28vh,220px)]" : ""} overflow-y-auto pr-0.5`}>
+        {topics.map((t, idx) => {
+          const discussed = discussedIds.has(t.id);
+          return (
+            <li key={t.id}>
+              <div className="flex w-full items-start gap-2 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--bg-primary)] sm:gap-2.5 sm:px-2 sm:py-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleDiscussed(t.id);
+                  }}
+                  className="mt-0.5 shrink-0 rounded-md p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-card)] hover:text-[var(--accent)]"
+                  aria-label={discussed ? "Mark as not discussed" : "Mark as discussed"}
+                  title={discussed ? "Discussed" : "Mark discussed"}
+                >
+                  {discussed ? (
+                    <CheckCircle2 size={compact ? 15 : 17} className="text-[var(--alert-success)]" aria-hidden />
+                  ) : (
+                    <Circle size={compact ? 15 : 17} className="text-[var(--border)]" strokeWidth={1.75} aria-hidden />
+                  )}
+                </button>
+                <span
+                  className={`min-w-0 flex-1 text-sm leading-snug ${
+                    discussed ? "text-[var(--text-muted)] line-through opacity-75" : "text-[var(--text-primary)]"
+                  }`}
+                >
+                  <span className="mr-1.5 inline-flex h-4 min-w-[1.1rem] items-center justify-center rounded bg-[var(--bg-primary)] px-1 text-[10px] font-semibold text-[var(--text-muted)]">
+                    {idx + 1}
+                  </span>
+                  {t.topic}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {topics.length === 0 && (
+        <p className="mb-2 text-xs text-[var(--text-muted)]">No topics yet. Add one below.</p>
+      )}
+
+      <div className={`mt-3 flex gap-2 border-t border-[var(--border)] pt-3 ${compact ? "flex-col" : ""}`}>
+        <input
+          type="text"
+          value={newTopicText}
+          disabled={addingTopic}
+          onChange={(e) => onNewTopicTextChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canSubmit) {
+              e.preventDefault();
+              onAddTopic();
+            }
+          }}
+          placeholder="New topic…"
+          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25 disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={onAddTopic}
+          disabled={!canSubmit}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-95 disabled:pointer-events-none disabled:opacity-35"
+        >
+          <Plus size={16} aria-hidden />
+          {addingTopic ? "Saving…" : "Add"}
+        </button>
+      </div>
+      {topicAddError && (
+        <p className="mt-2 text-xs text-[var(--alert-critical)]" role="alert">
+          {topicAddError}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ActiveMeetingOverlay({
   meeting,
   allMeetings,
   onClose,
   onActionItemCreated,
+  onTopicAdded,
 }: {
   meeting: MeetingListItem;
   allMeetings: MeetingListItem[];
   onClose: () => void;
   onActionItemCreated?: () => void | Promise<void>;
+  onTopicAdded?: () => void | Promise<void>;
 }) {
   const materials = meeting.materials ?? [];
   const [panel, setPanel] = useState<MeetingPanelId>(() =>
-    materials.length > 0 ? "presentations" : "agenda",
+    materials.length > 0 ? "presentations" : "financial",
   );
 
   const effectivePanel: MeetingPanelId =
-    panel === "presentations" && materials.length === 0 ? "agenda" : panel;
+    panel === "presentations" && materials.length === 0 ? "financial" : panel;
 
-  const [currentIdx, setCurrentIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [showCreateActionItem, setShowCreateActionItem] = useState(false);
+  /** Session-only "discussed" flags; not persisted */
+  const [discussedIds, setDiscussedIds] = useState<Set<string>>(() => new Set());
+  const [newTopicText, setNewTopicText] = useState("");
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [topicAddError, setTopicAddError] = useState<string | null>(null);
 
   const canCreateActionItem = hasPermission(getCurrentUser(), Permission.CREATE_ACTION_ITEMS);
+
+  const toggleDiscussed = (id: string) => {
+    setDiscussedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const addTopic = async () => {
+    const topic = newTopicText.trim();
+    if (!topic || addingTopic) return;
+    setTopicAddError(null);
+    setAddingTopic(true);
+    try {
+      await addMeetingTopic(meeting.id, topic);
+      setNewTopicText("");
+      await onTopicAdded?.();
+    } catch (e) {
+      setTopicAddError(e instanceof Error ? e.message : "Could not save topic");
+    } finally {
+      setAddingTopic(false);
+    }
+  };
 
   useEffect(() => {
     const t = setInterval(() => setElapsed((prev) => prev + 1), 1000);
@@ -87,9 +230,19 @@ export default function ActiveMeetingOverlay({
     return `${h > 0 ? String(h).padStart(2, "0") + ":" : ""}${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
-  const topics = meeting.topics;
-  const hasPrev = currentIdx > 0;
-  const hasNext = currentIdx < topics.length - 1;
+  const agendaPanelProps = {
+    topics: meeting.topics,
+    discussedIds,
+    onToggleDiscussed: toggleDiscussed,
+    newTopicText,
+    onNewTopicTextChange: (v: string) => {
+      setTopicAddError(null);
+      setNewTopicText(v);
+    },
+    onAddTopic: addTopic,
+    addingTopic,
+    topicAddError,
+  } as const;
 
   const panelLabel = PANELS.find((p) => p.id === effectivePanel)?.label ?? "";
 
@@ -171,117 +324,18 @@ export default function ActiveMeetingOverlay({
       </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-        {effectivePanel === "agenda" && (
-          <aside className="hidden w-[min(100%,20rem)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)] p-4 md:block lg:w-80 lg:p-5">
-            <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">Agenda outline</p>
-            <p className="mb-3 text-xs text-[var(--text-muted)]">
-              {topics.length} topic{topics.length !== 1 ? "s" : ""}
-            </p>
+        <aside className="hidden w-[min(100%,20rem)] shrink-0 overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-card)] p-4 md:block lg:w-80 lg:p-5">
+          <AgendaTodoPanel {...agendaPanelProps} />
+        </aside>
 
-            <ul className="space-y-1">
-              {topics.map((t, idx) => {
-                const isCurrent = idx === currentIdx;
-                const isDone = idx < currentIdx;
-                return (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIdx(idx)}
-                      className={`flex w-full items-start gap-3 rounded-lg px-2.5 py-2.5 text-left text-sm transition-colors ${
-                        isCurrent
-                          ? "bg-[var(--accent)]/10 font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/25"
-                          : isDone
-                            ? "text-[var(--text-muted)] line-through opacity-65"
-                            : "text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
-                      }`}
-                    >
-                      <span className="mt-0.5 shrink-0">
-                        {isDone ? (
-                          <CheckCircle2 size={16} className="text-[var(--alert-success)]" aria-hidden />
-                        ) : isCurrent ? (
-                          <MessageCircle size={16} aria-hidden />
-                        ) : (
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] text-[10px] font-medium text-[var(--text-muted)]">
-                            {idx + 1}
-                          </span>
-                        )}
-                      </span>
-                      <span className="leading-snug">{t.topic}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
-        )}
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg-primary)]/80">
+          <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-card)] px-3 py-3 md:hidden">
+            <AgendaTodoPanel {...agendaPanelProps} compact />
+          </div>
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg-primary)]/80">
-          <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-8 sm:py-8">
-            {effectivePanel !== "agenda" && effectivePanel !== "assistant" && (
+          <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+            {effectivePanel !== "assistant" && (
               <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)]">{panelLabel}</p>
-            )}
-
-            {effectivePanel === "agenda" && (
-              <div className="flex flex-1 flex-col justify-center">
-                {topics.length === 0 ? (
-                  <p className="text-center text-[var(--text-muted)]">No discussion topics for this meeting.</p>
-                ) : (
-                  <>
-                    <p className="mb-4 text-center text-[10px] font-medium uppercase tracking-[0.28em] text-[var(--text-muted)] md:text-left">
-                      Topic {currentIdx + 1} of {topics.length}
-                    </p>
-
-                    <div
-                      key={topics[currentIdx].id}
-                      className="w-full animate-[topicIn_0.35s_ease] rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm sm:p-8"
-                    >
-                      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/10">
-                        <MessageCircle size={22} className="text-[var(--accent)]" aria-hidden />
-                      </div>
-                      <h2 className="text-xl font-semibold leading-snug text-[var(--text-primary)] sm:text-2xl">
-                        {topics[currentIdx].topic}
-                      </h2>
-                    </div>
-
-                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentIdx((i) => i - 1)}
-                        disabled={!hasPrev}
-                        className="min-w-[7rem] rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-primary)] disabled:pointer-events-none disabled:opacity-35"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentIdx((i) => i + 1)}
-                        disabled={!hasNext}
-                        className="flex min-w-[7rem] items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-text)] shadow-sm transition-opacity hover:opacity-95 disabled:pointer-events-none disabled:opacity-35"
-                      >
-                        Next <ChevronRight size={16} aria-hidden />
-                      </button>
-                    </div>
-
-                    <div className="mt-6 flex justify-center gap-1.5 md:justify-start">
-                      {topics.map((_, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          aria-label={`Go to topic ${idx + 1}`}
-                          onClick={() => setCurrentIdx(idx)}
-                          className={`h-2 rounded-full transition-all ${
-                            idx === currentIdx
-                              ? "w-7 bg-[var(--accent)]"
-                              : idx < currentIdx
-                                ? "w-2 bg-[var(--accent)]/45"
-                                : "w-2 bg-[var(--border)]"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
             )}
 
             {effectivePanel === "presentations" && materials.length > 0 && (
@@ -336,13 +390,6 @@ export default function ActiveMeetingOverlay({
           </div>
         </main>
       </div>
-
-      <style>{`
-        @keyframes topicIn {
-          from { opacity: 0; transform: translateX(24px); }
-          to   { opacity: 1; transform: translateX(0); }
-        }
-      `}</style>
 
       {canCreateActionItem && (
         <CreateActionItemMeetingModal

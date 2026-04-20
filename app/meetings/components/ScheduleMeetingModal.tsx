@@ -184,6 +184,13 @@ export default function ScheduleMeetingModal({
 
           <div>
             <span className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Topics for Discussion</span>
+            <button
+              type="button"
+              onClick={addTopic}
+              className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
+            >
+              <Plus size={14} /> Add another topic
+            </button>
             <div className="mt-2 space-y-2">
               {topics.map((t, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -207,13 +214,7 @@ export default function ScheduleMeetingModal({
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={addTopic}
-              className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
-            >
-              <Plus size={14} /> Add another topic
-            </button>
+            
           </div>
 
           {formError && <p className="text-sm text-[var(--alert-critical)]">{formError}</p>}

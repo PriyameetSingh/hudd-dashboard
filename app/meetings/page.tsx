@@ -81,6 +81,7 @@ export default function MeetingsPage() {
         allMeetings={meetings}
         onClose={() => setActiveMeeting(null)}
         onActionItemCreated={refreshMeetingContext}
+        onTopicAdded={refreshMeetingContext}
       />
     );
   }
