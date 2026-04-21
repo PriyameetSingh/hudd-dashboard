@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 import DatabaseUnavailableShell from "@/components/DatabaseUnavailableShell";
 import { UserRole } from "@/lib/auth";
 import { asDatabaseUnavailableError } from "@/lib/db-errors";
-import { getFinancialBudgetEntriesOverview, getFinanceSummaryBreakdown } from "@/lib/financial-budget-entries";
+import {
+  getFinancialBudgetEntriesOverview,
+  getFinanceSummaryBreakdownForOverview,
+} from "@/lib/financial-budget-entries";
 import { getSessionUser } from "@/lib/server-auth";
 import { AuthError, requireAnyPermissionAndDbUser } from "@/lib/server-rbac";
 import FinancialOverviewClient from "./FinancialOverviewClient";
@@ -11,12 +14,19 @@ export default async function FinancialOverviewPage() {
   try {
     const rbacUser = await requireAnyPermissionAndDbUser("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
 
-    const [budgetData, summary] = await Promise.all([
+    const [budgetData, session] = await Promise.all([
       getFinancialBudgetEntriesOverview(rbacUser),
-      getFinanceSummaryBreakdown(),
+      getSessionUser(),
     ]);
 
-    const session = await getSessionUser();
+    const summary =
+      budgetData.financialYearId && budgetData.financialYearLabel
+        ? await getFinanceSummaryBreakdownForOverview(
+            budgetData.entries,
+            budgetData.financialYearId,
+            budgetData.financialYearLabel,
+          )
+        : null;
 
     return (
       <FinancialOverviewClient

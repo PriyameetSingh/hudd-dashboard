@@ -3,13 +3,14 @@ import { prisma } from "@/lib/prisma";
 import {
   FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+  FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES,
 } from "@/lib/finance-year-budget-allocation";
 import { deriveFinancialEntryStatus } from "@/lib/financial-status";
 import { getDashboardPrioritySchemeIds } from "@/lib/scheme-dashboard-priority";
+import { sponsorshipToSchemeBudgetCategory } from "@/lib/scheme-fy-bucket-metrics";
 import type { DbUserWithRbac } from "@/lib/server-rbac";
 import { getDbUserBySession } from "@/lib/server-rbac";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
-import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 import type { FinancialEntry, FinanceSummaryRow } from "@/types";
 
 export function toNumber(value: unknown): number {
@@ -33,17 +34,48 @@ export type FinanceSummaryBreakdown = {
   totals: { budgetEstimateCr: number; soExpenditureCr: number; ifmsExpenditureCr: number };
 };
 
-export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakdown | null> {
-  const fy = await prisma.financialYear.findFirst({
-    orderBy: { endDate: "desc" },
-  });
-  if (!fy) return null;
-
-  await syncSchemeFyCategoryLines(fy.id, null);
-  const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+/**
+ * Builds the FY head-wise summary for the overview without running {@link syncSchemeFyCategoryLines}.
+ * Scheme buckets match overview cards (by sponsorship); manual heads come from persisted allocation lines.
+ */
+export async function getFinanceSummaryBreakdownForOverview(
+  entries: FinancialEntry[],
+  financialYearId: string,
+  financialYearLabel: string,
+): Promise<FinanceSummaryBreakdown> {
+  const allocation = await ensureFyBudgetAllocationWithLines(financialYearId, null);
   const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
 
+  const schemeBuckets: Record<
+    (typeof FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES)[number],
+    { budgetEstimateCr: number; soExpenditureCr: number; ifmsExpenditureCr: number }
+  > = {
+    STATE_SCHEME: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+    CENTRALLY_SPONSORED_SCHEME: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+    CENTRAL_SECTOR_SCHEME: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+  };
+
+  for (const e of entries) {
+    const st = (e.metadata as { sponsorshipType?: SponsorshipType } | undefined)?.sponsorshipType;
+    if (!st) continue;
+    const cat = sponsorshipToSchemeBudgetCategory(st);
+    const eff = e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0);
+    schemeBuckets[cat].budgetEstimateCr += eff;
+    schemeBuckets[cat].soExpenditureCr += e.so;
+    schemeBuckets[cat].ifmsExpenditureCr += e.ifms;
+  }
+
   const rows: FinanceSummaryRow[] = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
+    if ((FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES as readonly string[]).includes(category)) {
+      const b = schemeBuckets[category as (typeof FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES)[number]];
+      return {
+        headCode: category,
+        label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
+        budgetEstimateCr: b.budgetEstimateCr,
+        soExpenditureCr: b.soExpenditureCr,
+        ifmsExpenditureCr: b.ifmsExpenditureCr,
+      };
+    }
     const line = lineByCategory.get(category);
     return {
       headCode: category,
@@ -64,7 +96,7 @@ export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakd
   );
 
   return {
-    financialYearLabel: fy.label,
+    financialYearLabel,
     asOfDate: null,
     rows,
     totals,
@@ -74,6 +106,7 @@ export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakd
 export async function getFinancialBudgetEntriesOverview(actor?: DbUserWithRbac | null): Promise<{
   entries: FinancialEntry[];
   financialYearLabel: string | null;
+  financialYearId: string | null;
 }> {
   const resolved = actor !== undefined ? actor : await getDbUserBySession();
   const roleIds = resolved?.userRoles?.map((ur: { roleId: string }) => ur.roleId) ?? [];
@@ -86,7 +119,7 @@ export async function getFinancialBudgetEntriesOverview(actor?: DbUserWithRbac |
   ]);
 
   if (!fy) {
-    return { entries: [], financialYearLabel: null };
+    return { entries: [], financialYearLabel: null, financialYearId: null };
   }
 
   const [schemes, budgets, snapshots, supplements] = await Promise.all([
@@ -311,7 +344,7 @@ export async function getFinancialBudgetEntriesOverview(actor?: DbUserWithRbac |
     return a.scheme.localeCompare(b.scheme);
   });
 
-  return { entries, financialYearLabel: fy.label };
+  return { entries, financialYearLabel: fy.label, financialYearId: fy.id };
 }
 
 function buildEntry(params: {

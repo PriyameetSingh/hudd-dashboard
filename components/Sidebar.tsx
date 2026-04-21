@@ -7,7 +7,7 @@ import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
 import { fetchMeetings, type MeetingListItem } from "@/src/lib/services/meetingService";
 import type { ActionItem, KPISubmission } from "@/types";
-import { LayoutDashboard, LayoutGrid, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers, Gauge } from "lucide-react";
 
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -129,7 +129,7 @@ const items: NavItem[] = [
     label: " Create Schemes",
     href: "/schemes",
     icon: Layers,
-    roles: Object.values(UserRole),
+    roles: [UserRole.TASU],
   },
   {
     label: "Decision Tracker",
@@ -173,6 +173,12 @@ const items: NavItem[] = [
     href: "/reports",
     icon: FileText,
     roles: [UserRole.AS, UserRole.PS_HUDD, UserRole.ACS],
+  },
+  {
+    label: "Execution Efficiency",
+    href: "/financial/execution-efficiency",
+    icon: Gauge,
+    roles: Object.values(UserRole),
   },
   {
     label: "Administration",

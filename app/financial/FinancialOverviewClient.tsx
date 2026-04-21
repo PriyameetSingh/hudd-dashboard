@@ -256,7 +256,7 @@ export default function FinancialOverviewClient({
 
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">{fyDisplay}</p>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Financial Command View</h1>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Schemes wise Financial Progress</h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             Live SO vs IFMS from finance budgets and expenditure snapshots (database). Use comparison mode for summary-head
             deltas (same basis as FA summary entries).
@@ -264,7 +264,7 @@ export default function FinancialOverviewClient({
         </div>
 
         {/* Comparison toolbar */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+        {/* <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
           <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Comparison</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {(
@@ -369,7 +369,7 @@ export default function FinancialOverviewClient({
               {loadingCompare ? " · Loading…" : ""}
             </p>
           )}
-        </div>
+        </div> */}
 
         <div className="grid gap-4 md:grid-cols-3">
           {[

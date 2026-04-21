@@ -398,7 +398,7 @@ function CommandCentreContent({ setActive }: Props) {
                   <ListChecks className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
                   <div className="min-w-0">
                     <span className="block text-[11px] text-semibold uppercase tracking-[0.2em] text-(--alert-critical)">
-                      Important topics
+                      Important topics for Discussion
                     </span>
                     {lastMeeting ? (
                       <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">

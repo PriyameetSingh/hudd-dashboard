@@ -185,7 +185,7 @@ export default function ActionItemsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-[var(--text-muted)]">Priority Actions</p>
-            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Action Items Tracker</h1>
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Key Decisions from last dashboard Meetings </h1>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Follow up on critical directives, approvals, and escalations across HUDD schemes.
             </p>
