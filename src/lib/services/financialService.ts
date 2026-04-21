@@ -90,7 +90,7 @@ export async function saveFinanceSummary(input: {
   asOfDate: string;
   financialYearLabel?: string;
   rows: Array<{
-    headCode: "PLAN_TYPE" | "TRANSFER" | "ADMIN_EXPENDITURE";
+    headCode: string;
     budgetEstimateCr: number;
     soExpenditureCr: number;
     ifmsExpenditureCr: number;
@@ -120,7 +120,7 @@ export async function fetchFyBudgetAllocation(params?: { financialYearLabel?: st
 
 export async function saveFyBudgetAllocation(input: {
   financialYearLabel?: string;
-  totalBudgetCr: number;
+  /** Manual FY lines only; scheme buckets are recomputed on the server from scheme budgets and expenditure. */
   lines: Array<{
     category: FinanceYearBudgetAllocationLineRow["category"];
     budgetEstimateCr: number;

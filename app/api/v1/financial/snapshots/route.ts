@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 
 export const runtime = "nodejs";
 
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest) {
         workflowTransition: workflowStatus,
       },
     );
+
+    await syncSchemeFyCategoryLines(fy.id, createdBy?.id ?? null);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

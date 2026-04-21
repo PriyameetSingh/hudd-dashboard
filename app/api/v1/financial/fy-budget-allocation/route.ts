@@ -5,8 +5,10 @@ import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import {
   FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+  FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES,
 } from "@/lib/finance-year-budget-allocation";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
         totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
       });
     }
+    await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
     const allocation = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
 
     const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
@@ -85,9 +88,9 @@ export async function GET(request: NextRequest) {
 
 type PutBody = {
   financialYearLabel?: string;
-  totalBudgetCr: number;
+  /** Manual categories only (State / Union Finance Commission, other transfer, admin). Scheme buckets are synced from scheme data. */
   lines: Array<{
-    category: (typeof FINANCE_YEAR_BUDGET_CATEGORY_ORDER)[number];
+    category: (typeof FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES)[number];
     budgetEstimateCr: number;
     soExpenditureCr: number;
     ifmsExpenditureCr: number;
@@ -110,37 +113,20 @@ export async function PUT(request: NextRequest) {
 
     const linesIn = body.lines ?? [];
     const categories = new Set(linesIn.map((l) => l.category));
-    if (categories.size !== FINANCE_YEAR_BUDGET_CATEGORY_ORDER.length) {
-      return NextResponse.json({ detail: "Exactly one row per budget category is required." }, { status: 400 });
+    if (categories.size !== FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES.length) {
+      return NextResponse.json({ detail: "Exactly one row per manual budget category is required." }, { status: 400 });
     }
-    for (const c of FINANCE_YEAR_BUDGET_CATEGORY_ORDER) {
+    for (const c of FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES) {
       if (!categories.has(c)) {
-        return NextResponse.json({ detail: `Missing category line: ${c}` }, { status: 400 });
+        return NextResponse.json({ detail: `Missing manual category line: ${c}` }, { status: 400 });
       }
     }
 
-    const sumBudgetEstimate = roundMoney(linesIn.reduce((s, l) => s + Number(l.budgetEstimateCr), 0));
-    const totalBudget = roundMoney(Number(body.totalBudgetCr));
-    if (sumBudgetEstimate !== totalBudget) {
-      return NextResponse.json(
-        {
-          detail: `Total budget (${totalBudget.toFixed(2)} ₹ Cr) must equal the sum of category budget estimates (${sumBudgetEstimate.toFixed(2)} ₹ Cr).`,
-        },
-        { status: 400 },
-      );
-    }
     const auditContext = getAuditRequestContext(request);
 
     const beforeAlloc = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
 
     await prisma.$transaction(async (tx) => {
-      await tx.financeYearBudgetAllocation.update({
-        where: { id: beforeAlloc.id },
-        data: {
-          totalBudgetCr: new Prisma.Decimal(totalBudget.toFixed(2)),
-          createdById: actor?.id ?? null,
-        },
-      });
       for (const row of linesIn) {
         await tx.financeYearBudgetCategoryLine.update({
           where: {
@@ -157,6 +143,8 @@ export async function PUT(request: NextRequest) {
         });
       }
     });
+
+    await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
 
     const afterAlloc = await prisma.financeYearBudgetAllocation.findUniqueOrThrow({
       where: { id: beforeAlloc.id },

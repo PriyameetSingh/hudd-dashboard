@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,8 @@ export async function POST(request: NextRequest) {
       { amountCr: String(body.amountCr), reason: body.reason, referenceNo: body.referenceNo ?? null },
       { ...auditContext, schemeId: scheme.id, subschemeId, financialYearId: fy.id },
     );
+
+    await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

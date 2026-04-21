@@ -382,6 +382,7 @@ model FinanceExpenditureSnapshot {
   @@map("finance_expenditure_snapshots")
 }
 
+/// Dated snapshot rows; scheme buckets (STATE_SCHEME / CENTRALLY_SPONSORED / CENTRAL_SECTOR) are derived from scheme data — use POST /summary only for manual heads (commissions, transfer, admin). Current FY totals also live on `FinanceYearBudgetCategoryLine`.
 model FinanceSummaryHead {
   id              String   @id @default(uuid()) @db.Uuid
   financialYearId  String   @db.Uuid

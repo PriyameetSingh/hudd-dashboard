@@ -1,9 +1,15 @@
 import { Prisma, type SponsorshipType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
+  FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+} from "@/lib/finance-year-budget-allocation";
 import { deriveFinancialEntryStatus } from "@/lib/financial-status";
 import { getDashboardPrioritySchemeIds } from "@/lib/scheme-dashboard-priority";
 import type { DbUserWithRbac } from "@/lib/server-rbac";
 import { getDbUserBySession } from "@/lib/server-rbac";
+import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 import type { FinancialEntry, FinanceSummaryRow } from "@/types";
 
 export function toNumber(value: unknown): number {
@@ -20,12 +26,6 @@ export function toNumber(value: unknown): number {
   return 0;
 }
 
-const SUMMARY_HEAD_LABELS: Record<string, string> = {
-  PLAN_TYPE: "Plan Type",
-  TRANSFER: "Transfer",
-  ADMIN_EXPENDITURE: "Admin Expenditure",
-};
-
 export type FinanceSummaryBreakdown = {
   financialYearLabel: string;
   asOfDate: string | null;
@@ -39,32 +39,20 @@ export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakd
   });
   if (!fy) return null;
 
-  const latestHead = await prisma.financeSummaryHead.findFirst({
-    where: { financialYearId: fy.id },
-    orderBy: { asOfDate: "desc" },
-  });
+  await syncSchemeFyCategoryLines(fy.id, null);
+  const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+  const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
 
-  if (!latestHead) {
+  const rows: FinanceSummaryRow[] = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
+    const line = lineByCategory.get(category);
     return {
-      financialYearLabel: fy.label,
-      asOfDate: null,
-      rows: [],
-      totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+      headCode: category,
+      label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
+      budgetEstimateCr: line ? toNumber(line.budgetEstimateCr) : 0,
+      soExpenditureCr: line ? toNumber(line.soExpenditureCr) : 0,
+      ifmsExpenditureCr: line ? toNumber(line.ifmsExpenditureCr) : 0,
     };
-  }
-
-  const heads = await prisma.financeSummaryHead.findMany({
-    where: { financialYearId: fy.id, asOfDate: latestHead.asOfDate },
-    orderBy: { headCode: "asc" },
   });
-
-  const rows: FinanceSummaryRow[] = heads.map((h) => ({
-    headCode: h.headCode,
-    label: SUMMARY_HEAD_LABELS[h.headCode] ?? h.headCode,
-    budgetEstimateCr: toNumber(h.budgetEstimateCr),
-    soExpenditureCr: toNumber(h.soExpenditureCr),
-    ifmsExpenditureCr: toNumber(h.ifmsExpenditureCr),
-  }));
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -77,7 +65,7 @@ export async function getFinanceSummaryBreakdown(): Promise<FinanceSummaryBreakd
 
   return {
     financialYearLabel: fy.label,
-    asOfDate: latestHead.asOfDate.toISOString().slice(0, 10),
+    asOfDate: null,
     rows,
     totals,
   };

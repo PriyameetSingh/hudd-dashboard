@@ -4,17 +4,28 @@ import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import {
   FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+  FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES,
 } from "@/lib/finance-year-budget-allocation";
+import { aggregateSnapshotTotalsBySchemeBucket } from "@/lib/finance-summary-asof";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
 import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 
 export const runtime = "nodejs";
 
-const HEAD_LABELS: Record<string, string> = {
+/** Legacy `finance_summary_heads` codes before FY category alignment. */
+const LEGACY_HEAD_LABELS: Record<string, string> = {
   PLAN_TYPE: "Plan Type",
   TRANSFER: "Transfer",
   ADMIN_EXPENDITURE: "Admin Expenditure",
 };
+
+function labelForHeadCode(headCode: string): string {
+  if (headCode in FINANCE_YEAR_BUDGET_CATEGORY_LABELS) {
+    return FINANCE_YEAR_BUDGET_CATEGORY_LABELS[headCode as keyof typeof FINANCE_YEAR_BUDGET_CATEGORY_LABELS];
+  }
+  return LEGACY_HEAD_LABELS[headCode] ?? headCode;
+}
 
 function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -49,68 +60,95 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const asOfDate = asOfDateParam
-      ? new Date(`${asOfDateParam}T00:00:00.000Z`)
-      : undefined;
+    const asOfDate = asOfDateParam ? new Date(`${asOfDateParam}T00:00:00.000Z`) : undefined;
+    const responseAsOf: string | null = asOfDate?.toISOString().slice(0, 10) ?? null;
+
+    if (!asOfDate) {
+      await syncSchemeFyCategoryLines(fy.id, null);
+      const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+      const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
+      const rows = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
+        const row = lineByCategory.get(category);
+        return {
+          headCode: category,
+          label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
+          budgetEstimateCr: row ? toNumber(row.budgetEstimateCr) : 0,
+          soExpenditureCr: row ? toNumber(row.soExpenditureCr) : 0,
+          ifmsExpenditureCr: row ? toNumber(row.ifmsExpenditureCr) : 0,
+        };
+      });
+      const totals = rows.reduce(
+        (acc, r) => ({
+          budgetEstimateCr: acc.budgetEstimateCr + r.budgetEstimateCr,
+          soExpenditureCr: acc.soExpenditureCr + r.soExpenditureCr,
+          ifmsExpenditureCr: acc.ifmsExpenditureCr + r.ifmsExpenditureCr,
+        }),
+        { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+      );
+      return NextResponse.json({
+        financialYearLabel: fy.label,
+        asOfDate: null,
+        rows,
+        totals,
+      });
+    }
 
     const heads = await prisma.financeSummaryHead.findMany({
       where: {
         financialYearId: fy.id,
-        ...(asOfDate ? { asOfDate } : {}),
+        asOfDate,
       },
       orderBy: { headCode: "asc" },
     });
 
-    let rows = heads.map((h) => ({
-      headCode: h.headCode,
-      label: HEAD_LABELS[h.headCode] ?? h.headCode,
-      budgetEstimateCr: toNumber(h.budgetEstimateCr),
-      soExpenditureCr: toNumber(h.soExpenditureCr),
-      ifmsExpenditureCr: toNumber(h.ifmsExpenditureCr),
-    }));
-
-    let responseAsOf: string | null = asOfDate?.toISOString().slice(0, 10) ?? null;
-
-    if (rows.length === 0) {
-      if (!asOfDate) {
-        const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
-        const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
-        rows = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
-          const row = lineByCategory.get(category);
-          return {
-            headCode: category,
-            label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
-            budgetEstimateCr: row ? toNumber(row.budgetEstimateCr) : 0,
-            soExpenditureCr: row ? toNumber(row.soExpenditureCr) : 0,
-            ifmsExpenditureCr: row ? toNumber(row.ifmsExpenditureCr) : 0,
-          };
-        });
-        responseAsOf = null;
-      } else {
-        const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
-        const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
-        const budgetEstimateCr = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.reduce(
-          (acc, category) => acc + toNumber(lineByCategory.get(category)?.budgetEstimateCr),
-          0,
-        );
-        const snap = await prisma.financeExpenditureSnapshot.aggregate({
-          where: { financialYearId: fy.id, asOfDate },
-          _sum: { soExpenditureCr: true, ifmsExpenditureCr: true },
-        });
-        rows = [];
-        const totals = {
-          budgetEstimateCr,
-          soExpenditureCr: toNumber(snap._sum.soExpenditureCr),
-          ifmsExpenditureCr: toNumber(snap._sum.ifmsExpenditureCr),
-        };
-        return NextResponse.json({
-          financialYearLabel: fy.label,
-          asOfDate: responseAsOf,
-          rows,
-          totals,
-        });
-      }
+    if (heads.length > 0) {
+      const rows = heads.map((h) => ({
+        headCode: h.headCode,
+        label: labelForHeadCode(h.headCode),
+        budgetEstimateCr: toNumber(h.budgetEstimateCr),
+        soExpenditureCr: toNumber(h.soExpenditureCr),
+        ifmsExpenditureCr: toNumber(h.ifmsExpenditureCr),
+      }));
+      const totals = rows.reduce(
+        (acc, r) => ({
+          budgetEstimateCr: acc.budgetEstimateCr + r.budgetEstimateCr,
+          soExpenditureCr: acc.soExpenditureCr + r.soExpenditureCr,
+          ifmsExpenditureCr: acc.ifmsExpenditureCr + r.ifmsExpenditureCr,
+        }),
+        { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+      );
+      return NextResponse.json({
+        financialYearLabel: fy.label,
+        asOfDate: responseAsOf,
+        rows,
+        totals,
+      });
     }
+
+    await syncSchemeFyCategoryLines(fy.id, null);
+    const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+    const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
+    const bucketExp = await aggregateSnapshotTotalsBySchemeBucket(fy.id, asOfDate);
+
+    const rows = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
+      const line = lineByCategory.get(category);
+      const base = {
+        headCode: category,
+        label: FINANCE_YEAR_BUDGET_CATEGORY_LABELS[category],
+        budgetEstimateCr: line ? toNumber(line.budgetEstimateCr) : 0,
+        soExpenditureCr: line ? toNumber(line.soExpenditureCr) : 0,
+        ifmsExpenditureCr: line ? toNumber(line.ifmsExpenditureCr) : 0,
+      };
+      if (category === "STATE_SCHEME" || category === "CENTRALLY_SPONSORED_SCHEME" || category === "CENTRAL_SECTOR_SCHEME") {
+        const b = bucketExp[category];
+        return {
+          ...base,
+          soExpenditureCr: b.soExpenditureCr,
+          ifmsExpenditureCr: b.ifmsExpenditureCr,
+        };
+      }
+      return base;
+    });
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -140,7 +178,7 @@ type Body = {
   financialYearLabel?: string;
   asOfDate: string;
   rows: Array<{
-    headCode: "PLAN_TYPE" | "TRANSFER" | "ADMIN_EXPENDITURE";
+    headCode: string;
     budgetEstimateCr: number;
     soExpenditureCr: number;
     ifmsExpenditureCr: number;
@@ -158,6 +196,16 @@ export async function POST(request: NextRequest) {
 
     if (!fy) {
       return NextResponse.json({ detail: "Financial year not found" }, { status: 404 });
+    }
+
+    const manual = new Set(FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES);
+    for (const row of body.rows ?? []) {
+      if (!manual.has(row.headCode as (typeof FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES)[number])) {
+        return NextResponse.json(
+          { detail: `Head "${row.headCode}" is derived from scheme data and cannot be set via this API.` },
+          { status: 400 },
+        );
+      }
     }
 
     const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);

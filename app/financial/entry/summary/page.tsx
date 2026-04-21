@@ -6,11 +6,17 @@ import { useRequireRole } from "@/src/lib/route-guards";
 import { UserRole } from "@/lib/auth";
 import { fetchFyBudgetAllocation, saveFyBudgetAllocation } from "@/src/lib/services/financialService";
 import type { FinanceYearBudgetAllocationLineRow } from "@/types";
-import { FINANCE_YEAR_BUDGET_CATEGORY_ORDER, FINANCE_YEAR_BUDGET_CATEGORY_LABELS } from "@/lib/finance-year-budget-allocation";
+import {
+  FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
+  FINANCE_YEAR_BUDGET_CATEGORY_LABELS,
+  FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES,
+} from "@/lib/finance-year-budget-allocation";
 
 function roundCr(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+const MANUAL_CATEGORY_SET = new Set<string>(FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES);
 
 function defaultLines(): FinanceYearBudgetAllocationLineRow[] {
   return FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => ({
@@ -62,8 +68,6 @@ export default function SummaryEntryPage() {
     [allocationLines],
   );
 
-  const totalBudgetCr = roundCr(totals.budgetEstimateCr);
-
   const handleSave = async () => {
     if (!financialYearLabel) {
       setError("Financial year not loaded.");
@@ -74,13 +78,14 @@ export default function SummaryEntryPage() {
     try {
       await saveFyBudgetAllocation({
         financialYearLabel,
-        totalBudgetCr,
-        lines: allocationLines.map((r) => ({
-          category: r.category,
-          budgetEstimateCr: roundCr(r.budgetEstimateCr),
-          soExpenditureCr: roundCr(r.soExpenditureCr),
-          ifmsExpenditureCr: roundCr(r.ifmsExpenditureCr),
-        })),
+        lines: allocationLines
+          .filter((r) => MANUAL_CATEGORY_SET.has(r.category))
+          .map((r) => ({
+            category: r.category,
+            budgetEstimateCr: roundCr(r.budgetEstimateCr),
+            soExpenditureCr: roundCr(r.soExpenditureCr),
+            ifmsExpenditureCr: roundCr(r.ifmsExpenditureCr),
+          })),
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -124,8 +129,9 @@ export default function SummaryEntryPage() {
               {financialYearLabel ? `FY ${financialYearLabel}` : "Loading financial year..."}
             </p>
             <p className="mt-2 text-sm text-[var(--text-muted)] max-w-2xl">
-              Enter budget estimate and expenditure by category for the selected year. Total budget (₹ Cr) is the sum of budget
-              estimates across all categories.
+              State, centrally sponsored, and central sector scheme rows are calculated from scheme budgets, supplements, and
+              expenditure. Edit only the commission, transfer, and admin lines below; total budget (₹ Cr) is the sum of estimates
+              across all categories.
             </p>
           </div>
 
@@ -144,38 +150,56 @@ export default function SummaryEntryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allocationLines.map((row) => (
-                      <tr key={row.category} className="border-t border-[var(--border)]">
-                        <td className="py-3 pr-4 text-[var(--text-primary)] font-medium">{row.label}</td>
-                        <td className="py-2 pr-4">
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-                            value={row.budgetEstimateCr}
-                            onChange={(e) => updateRow(row.category, "budgetEstimateCr", Number(e.target.value))}
-                          />
-                        </td>
-                        <td className="py-2 pr-4">
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-                            value={row.soExpenditureCr}
-                            onChange={(e) => updateRow(row.category, "soExpenditureCr", Number(e.target.value))}
-                          />
-                        </td>
-                        <td className="py-2 pr-4">
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-                            value={row.ifmsExpenditureCr}
-                            onChange={(e) => updateRow(row.category, "ifmsExpenditureCr", Number(e.target.value))}
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {allocationLines.map((row) => {
+                      const editable = MANUAL_CATEGORY_SET.has(row.category);
+                      const inputClass =
+                        "w-full rounded border border-[var(--border)] px-2 py-1.5 text-sm " +
+                        (editable
+                          ? "bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                          : "bg-[var(--bg-primary)]/60 text-[var(--text-muted)] cursor-not-allowed");
+                      return (
+                        <tr key={row.category} className="border-t border-[var(--border)]">
+                          <td className="py-3 pr-4 text-[var(--text-primary)] font-medium">
+                            {row.label}
+                            {!editable && (
+                              <span className="ml-2 text-[10px] font-normal uppercase tracking-wider text-[var(--text-muted)]">
+                                (from schemes)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={inputClass}
+                              readOnly={!editable}
+                              value={row.budgetEstimateCr}
+                              onChange={(e) => updateRow(row.category, "budgetEstimateCr", Number(e.target.value))}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={inputClass}
+                              readOnly={!editable}
+                              value={row.soExpenditureCr}
+                              onChange={(e) => updateRow(row.category, "soExpenditureCr", Number(e.target.value))}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={inputClass}
+                              readOnly={!editable}
+                              value={row.ifmsExpenditureCr}
+                              onChange={(e) => updateRow(row.category, "ifmsExpenditureCr", Number(e.target.value))}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-[var(--border)] font-semibold text-[var(--text-primary)]">

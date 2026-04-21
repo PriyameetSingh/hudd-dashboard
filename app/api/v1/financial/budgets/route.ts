@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
+import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 
 export const runtime = "nodejs";
 
@@ -100,6 +101,8 @@ export async function PATCH(request: NextRequest) {
         { ...auditContext, schemeId: scheme.id, subschemeId, financialYearId: fy.id },
       );
     }
+
+    await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
