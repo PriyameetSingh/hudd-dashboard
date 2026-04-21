@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { UserRole, getCurrentUser, type MockUser } from "@/lib/auth";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
+import { fetchMeetings, type MeetingListItem } from "@/src/lib/services/meetingService";
 import type { ActionItem, KPISubmission } from "@/types";
 import { LayoutDashboard, LayoutGrid, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers } from "lucide-react";
 
@@ -91,32 +92,26 @@ type NavItem = {
 
 const items: NavItem[] = [
   {
-    label: "Dashboard",
+    label: "Overview",
     href: "/dashboard",
     icon: LayoutDashboard,
     roles: Object.values(UserRole),
   },
   {
-    label: "Financial Overview",
+    label: "Financial Progress",
     href: "/financial",
     icon: IndianRupee,
     roles: Object.values(UserRole),
     children: [
       {
-        label: "Utilisation board",
-        href: "/financial/schemes-board",
-        icon: LayoutGrid,
-        roles: Object.values(UserRole),
-      },
-      {
-        label: "Scheme Entry",
+        label: "My Tasks",
         href: "/financial/entry/scheme",
         icon: IndianRupee,
         roles: [UserRole.FA],
         emphasis: true,
       },
       {
-        label: "Summary Entry",
+        label: "Summary",
         href: "/financial/entry/summary",
         icon: UserCog,
         roles: [UserRole.FA],
@@ -125,28 +120,19 @@ const items: NavItem[] = [
     ],
   },
   {
-    label: "Schemes",
+    label: "Scheme Budget vs Expense",
+    href: "/financial/schemes-board",
+    icon: LayoutGrid,
+    roles: Object.values(UserRole),
+  },
+  {
+    label: " Create Schemes",
     href: "/schemes",
     icon: Layers,
     roles: Object.values(UserRole),
   },
   {
-    label: "KPI Tracker",
-    href: "/kpis",
-    icon: ClipboardList,
-    roles: Object.values(UserRole),
-    children: [
-      {
-        label: "Enter KPIs",
-        href: "/kpis/entry",
-        icon: ShieldCheck,
-        roles: [UserRole.NODAL_OFFICER],
-        emphasis: true,
-      },
-    ],
-  },
-  {
-    label: "Action Items",
+    label: "Decision Tracker",
     href: "/action-items",
     icon: ListChecks,
     roles: Object.values(UserRole),
@@ -160,6 +146,22 @@ const items: NavItem[] = [
       },
     ],
   },
+  {
+    label: "KPI Monitoring",
+    href: "/kpis",
+    icon: ClipboardList,
+    roles: Object.values(UserRole),
+    children: [
+      {
+        label: "My Tasks",
+        href: "/kpis/entry",
+        icon: ShieldCheck,
+        roles: [UserRole.NODAL_OFFICER],
+        emphasis: true,
+      },
+    ],
+  },
+  
   {
     label: "Meetings",
     href: "/meetings",
@@ -211,6 +213,112 @@ function isTopNavActive(pathname: string, href: string) {
     return pathname === "/dashboard" || pathname === "/command-centre";
   }
   return pathname === href;
+}
+
+function formatMeetingSidebarLabel(m: MeetingListItem) {
+  const d = new Date(`${m.meetingDate}T12:00:00`);
+  const label = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
+  const title = m.title?.trim();
+  return title ? `${label} — ${title}` : label;
+}
+
+function MeetingScopeSelectInner() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetchMeetings()
+      .then((m) => {
+        if (active) setMeetings(m);
+      })
+      .catch(() => {
+        if (active) setMeetings([]);
+      })
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const sorted = useMemo(
+    () => [...meetings].sort((a, b) => b.meetingDate.localeCompare(a.meetingDate)),
+    [meetings],
+  );
+
+  const param = searchParams.get("meeting");
+  const selectedId =
+    param && sorted.some((m) => m.id === param) ? param : sorted[0]?.id ?? "";
+
+  useEffect(() => {
+    if (!sorted.length) return;
+    if (pathname !== "/dashboard" && pathname !== "/command-centre") return;
+    const p = searchParams.get("meeting");
+    if (p && !sorted.some((m) => m.id === p)) {
+      router.replace(`/dashboard?meeting=${encodeURIComponent(sorted[0].id)}`, { scroll: false });
+    }
+  }, [sorted, pathname, searchParams, router]);
+
+  const onSelect = (id: string) => {
+    if (!id) return;
+    if (pathname === "/dashboard" || pathname === "/command-centre") {
+      router.replace(`/dashboard?meeting=${encodeURIComponent(id)}`, { scroll: false });
+    } else {
+      router.push(`/dashboard?meeting=${encodeURIComponent(id)}`);
+    }
+  };
+
+  if (!loaded) {
+    return (
+      <div className="mx-3 mb-3 h-[72px] animate-pulse rounded-lg bg-[var(--sidebar-border)]/25" aria-hidden />
+    );
+  }
+
+  if (sorted.length === 0) {
+    return (
+      <div className="mx-3 mb-3 rounded-lg border border-dashed border-[var(--sidebar-border)] px-2.5 py-2 text-[10px] leading-snug text-[var(--sidebar-text-muted)]">
+        No meetings yet. Schedule one under Meetings to scope the dashboard.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-3 mb-3">
+      <label className="flex flex-col gap-1.5">
+        {/* <span className="flex items-center gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--sidebar-text-muted)]">
+          <CalendarDays size={12} className="shrink-0 opacity-80" aria-hidden />
+          Meeting scope
+        </span> */}
+        <select
+          className="w-full rounded-md border border-(--sidebar-border) bg-(--bg-surface) px-2 py-1.5 text-[12px] font-medium text-[var(--sidebar-text-primary)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--sidebar-active-bg)]/40"
+          value={selectedId}
+          onChange={(e) => onSelect(e.target.value)}
+          title="Topics, presentations, and meeting context on the dashboard follow this meeting (latest by default)."
+        >
+          {sorted.map((m) => (
+            <option key={m.id} value={m.id}>
+              {formatMeetingSidebarLabel(m)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function MeetingScopeSelect() {
+  return (
+    <Suspense
+      fallback={<div className="mx-3 mb-3 h-[72px] animate-pulse rounded-lg bg-[var(--sidebar-border)]/25" aria-hidden />}
+    >
+      <MeetingScopeSelectInner />
+    </Suspense>
+  );
 }
 
 export default function Sidebar() {
@@ -283,8 +391,8 @@ export default function Sidebar() {
   const visibleItems = user ? items.filter(item => item.roles.includes(user.role)) : [];
 
   return (
-    <aside className="w-64 h-full bg-[var(--bg-surface)] border-r border-[var(--sidebar-border)] flex flex-col sticky top-0">
-      <div className="px-6 py-5 border-b border-[var(--sidebar-border)] items-center justify-center flex">
+    <aside className="w-64 h-full bg-(--bg-surface) border-r border-(--sidebar-border) flex flex-col sticky top-0">
+      <div className="px-6 py-5 border-b border-(--sidebar-border) items-center justify-center flex">
         {/* <div className="text-sm font-semibold tracking-[0.6em] text-[var(--sidebar-text-muted)]">HUDD</div> */}
         {/* <div className="text-xs uppercase text-[var(--sidebar-text-muted)] mt-1">Government of Odisha</div> */}
         <img src="/logo.png" alt="HUDD Logo" className="w-24 h-24" />
@@ -295,6 +403,8 @@ export default function Sidebar() {
           </div>
         )} */}
       </div>
+
+      <MeetingScopeSelect />
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1 px-2">
         {visibleItems.map(item => {

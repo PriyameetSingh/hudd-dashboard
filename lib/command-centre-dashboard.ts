@@ -38,6 +38,20 @@ export type CommandCentreOverduePreview = {
   daysOverdue: number;
 };
 
+/** Latest dashboard meeting (by date), for command-centre summary cards. */
+export type CommandCentreLastMeeting = {
+  id: string;
+  meetingDate: string;
+  title: string | null;
+  topics: Array<{ id: string; topic: string }>;
+  presentationMaterials: Array<{
+    id: string;
+    fileName: string;
+    /** Inferred by matching vertical names against the file name; "Other" if none match. */
+    verticalLabel: string;
+  }>;
+};
+
 export type CommandCentreDashboard = {
   financialYearLabel: string | null;
   lastSnapshotDate: string | null;
@@ -55,6 +69,7 @@ export type CommandCentreDashboard = {
   overdueActionsCount: number;
   overdueActionsPreview: CommandCentreOverduePreview[];
   criticalSchemeCount: number;
+  lastMeeting: CommandCentreLastMeeting | null;
 };
 
 function schemePct(entry: FinancialEntry): number {
@@ -69,10 +84,56 @@ function schemeStatusFromPct(pct: number): CommandCentreSchemeSummary["status"] 
   return "on-track";
 }
 
-export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): Promise<CommandCentreDashboard> {
-  const fyRow = await prisma.financialYear.findFirst({ orderBy: { endDate: "desc" }, select: { id: true } });
+function verticalLabelFromFileName(fileName: string, verticalNames: string[]): string {
+  const lower = fileName.toLowerCase();
+  let best: string | null = null;
+  let bestLen = 0;
+  for (const name of verticalNames) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    if (lower.includes(trimmed.toLowerCase()) && trimmed.length > bestLen) {
+      best = trimmed;
+      bestLen = trimmed.length;
+    }
+  }
+  return best ?? "Other";
+}
 
-  const [{ entries, financialYearLabel }, overdueItems, trendRows] = await Promise.all([
+async function loadDashboardMeetingRowForCommandCentre(requestedId: string | null | undefined) {
+  const include = {
+    topics: { orderBy: { createdAt: "asc" as const } },
+    materials: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
+  };
+  if (requestedId) {
+    const row = await prisma.dashboardMeeting.findUnique({
+      where: { id: requestedId },
+      include,
+    });
+    if (row) return row;
+  }
+  return prisma.dashboardMeeting.findFirst({
+    orderBy: { meetingDate: "desc" },
+    include,
+  });
+}
+
+export type CommandCentreDashboardOptions = {
+  /** When set, meeting-scoped cards (topics, presentations) use this meeting; invalid id falls back to latest by date. */
+  meetingId?: string | null;
+};
+
+export async function getCommandCentreDashboard(
+  actor?: DbUserWithRbac | null,
+  options?: CommandCentreDashboardOptions,
+): Promise<CommandCentreDashboard> {
+  const [fyRow, verticalRows] = await Promise.all([
+    prisma.financialYear.findFirst({ orderBy: { endDate: "desc" }, select: { id: true } }),
+    prisma.vertical.findMany({ select: { name: true } }),
+  ]);
+
+  const verticalNames = verticalRows.map((v) => v.name);
+
+  const [{ entries, financialYearLabel }, overdueItems, trendRows, lastMeetingRow] = await Promise.all([
     getFinancialBudgetEntriesOverview(actor),
     prisma.actionItem.findMany({
       where: { status: "OVERDUE" },
@@ -90,6 +151,7 @@ export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): 
           orderBy: { asOfDate: "asc" },
         })
       : Promise.resolve([]),
+    loadDashboardMeetingRowForCommandCentre(options?.meetingId),
   ]);
 
   const fy = fyRow;
@@ -173,6 +235,20 @@ export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): 
 
   const criticalSchemeCount = schemes.filter((s) => s.status === "critical").length;
 
+  const lastMeeting: CommandCentreLastMeeting | null = lastMeetingRow
+    ? {
+        id: lastMeetingRow.id,
+        meetingDate: lastMeetingRow.meetingDate.toISOString().slice(0, 10),
+        title: lastMeetingRow.title,
+        topics: lastMeetingRow.topics.map((t) => ({ id: t.id, topic: t.topic })),
+        presentationMaterials: lastMeetingRow.materials.map((m) => ({
+          id: m.id,
+          fileName: m.fileName,
+          verticalLabel: verticalLabelFromFileName(m.fileName, verticalNames),
+        })),
+      }
+    : null;
+
   return {
     financialYearLabel,
     lastSnapshotDate,
@@ -190,5 +266,6 @@ export async function getCommandCentreDashboard(actor?: DbUserWithRbac | null): 
     overdueActionsCount: overdueCount,
     overdueActionsPreview,
     criticalSchemeCount,
+    lastMeeting,
   };
 }

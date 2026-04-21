@@ -1,13 +1,22 @@
 "use client";
 
 import { getCurrentUser, UserRole } from "@/lib/auth";
-import { useRouter } from "next/navigation";
-import { useMemo, useEffect, useState } from "react";
-import { AlertTriangle, TrendingUp, Clock, ArrowUpRight } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useEffect, useState, useCallback, Suspense } from "react";
+import {
+  AlertTriangle,
+  TrendingUp,
+  Clock,
+  ArrowUpRight,
+  ListChecks,
+  Presentation,
+  ExternalLink,
+} from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchPendingApprovalSummaries } from "@/src/lib/services/approvalService";
 import { fetchCommandCentreDashboard } from "@/src/lib/services/dashboardService";
-import type { CommandCentreDashboard } from "@/lib/command-centre-dashboard";
+import { getMeetingMaterialSignedUrl } from "@/src/lib/services/meetingService";
+import type { CommandCentreDashboard, CommandCentreLastMeeting } from "@/lib/command-centre-dashboard";
 import ApprovalCard from "@/src/components/ui/ApprovalCard";
 import { PendingApprovalSummary } from "@/types";
 import AiAlertsCard from "@/components/command-centre/AiAlertsCard";
@@ -34,6 +43,21 @@ function formatCr(value: number) {
 function pctTrendFromValue(pct: number): number[] {
   const p = Math.min(100, Math.max(0, pct));
   return [p * 0.45, p * 0.58, p * 0.68, p * 0.78, p * 0.88, p].map((x) => Math.round(x * 10) / 10);
+}
+
+function formatMeetingDate(isoDate: string) {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
+}
+
+function groupPresentationsByVertical(m: CommandCentreLastMeeting["presentationMaterials"]) {
+  const map = new Map<string, typeof m>();
+  for (const item of m) {
+    const list = map.get(item.verticalLabel);
+    if (list) list.push(item);
+    else map.set(item.verticalLabel, [item]);
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
 /** Financial progress leader cards (dashboard reference styling) */
@@ -111,8 +135,10 @@ interface Props {
   setActive: (id: string) => void;
 }
 
-export default function CommandCentre({ setActive }: Props) {
+function CommandCentreContent({ setActive }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const meetingId = searchParams.get("meeting");
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
   const [pendingSummaries, setPendingSummaries] = useState<PendingApprovalSummary[]>([]);
   const [dashboard, setDashboard] = useState<CommandCentreDashboard | null>(null);
@@ -124,6 +150,7 @@ export default function CommandCentre({ setActive }: Props) {
     name: string;
     verticalName: string;
   } | null>(null);
+  const [openingMaterialId, setOpeningMaterialId] = useState<string | null>(null);
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -132,30 +159,39 @@ export default function CommandCentre({ setActive }: Props) {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [pendingRes, dashRes] = await Promise.allSettled([
-        fetchPendingApprovalSummaries(),
-        fetchCommandCentreDashboard(),
-      ]);
-      if (!active) return;
-      if (pendingRes.status === "fulfilled") {
-        setPendingSummaries(pendingRes.value);
-      } else {
-        setPendingSummaries([]);
+      try {
+        const summaries = await fetchPendingApprovalSummaries();
+        if (active) setPendingSummaries(summaries);
+      } catch {
+        if (active) setPendingSummaries([]);
       }
-      if (dashRes.status === "fulfilled") {
-        setDashboard(dashRes.value);
-        setDashError(null);
-      } else {
-        const reason = dashRes.reason;
-        setDashError(reason instanceof Error ? reason.message : "Failed to load dashboard");
-        setDashboard(null);
-      }
-      setDashLoading(false);
     })();
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setDashLoading(true);
+    void (async () => {
+      try {
+        const data = await fetchCommandCentreDashboard(meetingId ?? undefined);
+        if (!active) return;
+        setDashboard(data);
+        setDashError(null);
+      } catch (e: unknown) {
+        if (!active) return;
+        setDashError(e instanceof Error ? e.message : "Failed to load dashboard");
+        setDashboard(null);
+      } finally {
+        if (active) setDashLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [meetingId]);
 
   const pendingSummary = useMemo(() => {
     if (!user) return null;
@@ -191,6 +227,25 @@ export default function CommandCentre({ setActive }: Props) {
       d: p.asOfDate.slice(5),
       ifms: Math.round(p.ifmsCr * 10) / 10,
     })) ?? [];
+
+  const lastMeeting = dashboard?.lastMeeting ?? null;
+  const presentationsByVertical = useMemo(
+    () => (lastMeeting ? groupPresentationsByVertical(lastMeeting.presentationMaterials) : []),
+    [lastMeeting],
+  );
+
+  const openUploadedMaterial = useCallback(
+    async (meetingId: string, materialId: string) => {
+      setOpeningMaterialId(materialId);
+      try {
+        const { url } = await getMeetingMaterialSignedUrl(meetingId, materialId);
+        window.open(url, "_blank", "noopener,noreferrer");
+      } finally {
+        setOpeningMaterialId(null);
+      }
+    },
+    [],
+  );
 
   return (
     <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -289,7 +344,7 @@ export default function CommandCentre({ setActive }: Props) {
             ))}
         </div>
 
-        <div className="w-96 flex flex-col gap-2 ">
+        {/* <div className="w-96 flex flex-col gap-2 ">
           <div
             className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2"
           >
@@ -304,7 +359,7 @@ export default function CommandCentre({ setActive }: Props) {
               href={isViewer ? undefined : card.href}
             />
           ))}
-        </div>
+        </div> */}
       </div>
 
       {dashError && (
@@ -322,196 +377,134 @@ export default function CommandCentre({ setActive }: Props) {
         </div>
       )}
 
-      {/* Fiscal year utilisation */}
-      <div
-        style={{
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          padding: "16px",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span
-            style={{
-              fontSize: 11,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              color: "var(--text-muted)",
-            }}
-          >
-            Fiscal year utilisation
-          </span>
-          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-            {totals ? `${utilPct}% of ${formatCr(totals.totalBudgetCr)}` : "—"}
-            {dashboard?.lastSnapshotDate ? ` · snapshots through ${dashboard.lastSnapshotDate}` : ""}
-          </span>
-        </div>
-        <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${Math.min(100, totals?.utilisationPct ?? 0)}%`,
-              background: "var(--text-primary)",
-              borderRadius: 4,
-              transition: "width 1s",
-            }}
-          />
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginTop: 6,
-            fontSize: 10,
-            color: "var(--text-muted)",
-          }}
-        >
-          <span>₹0</span>
-          <span>SO: {totals ? formatCr(totals.totalSoCr) : "—"}</span>
-          <span>{totals ? formatCr(totals.totalBudgetCr) : "—"} budget</span>
-        </div>
-      </div>
-
-      {/* IFMS trend */}
-      {ifmsChartData.length > 0 && (
-        <div
-          style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: "16px",
-          }}
-        >
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "var(--text-muted)", marginBottom: 8 }}>
-            Department IFMS (₹ Cr) by snapshot date
-          </div>
-          <div style={{ height: 140 }}>
-            <ResponsiveContainer width="100%" height={140}>
-              <AreaChart data={ifmsChartData}>
-                <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border)",
-                    fontSize: 11,
-                    color: "var(--text-primary)",
-                  }}
-                  formatter={(v) => [`${Number(v ?? 0)} Cr`, "IFMS"]}
-                />
-                <Area type="monotone" dataKey="ifms" stroke="var(--text-primary)" fill="var(--text-primary)" fillOpacity={0.12} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
-        <div>
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              color: "var(--text-muted)",
-              marginBottom: 10,
-            }}
-          >
-            Schemes
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {(dashboard?.schemes ?? []).map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() =>
-                  setSchemeModal({
-                    id: s.schemeId,
-                    code: s.id,
-                    name: s.scheme,
-                    verticalName: s.vertical,
-                  })
-                }
-                style={{
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  padding: "14px",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "border-color 0.15s",
-                  borderTop: `3px solid ${statusColor(s.status)}`,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: "var(--text-muted)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      minWidth: 0,
-                    }}
-                    title={s.vertical}
-                  >
-                    {s.vertical}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 600,
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                      color: statusColor(s.status),
-                      flexShrink: 0,
-                    }}
-                  >
-                    {statusLabel(s.status)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    marginBottom: 2,
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {s.scheme}
-                </div>
-                <div style={{ marginBottom: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 3 }}>
-                    <span style={{ color: "var(--text-muted)" }}>IFMS / budget</span>
-                    <span
-                      style={{
-                        fontWeight: 600,
-                        color: "var(--text-primary)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {s.pct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div style={{ height: 4, background: "var(--border)", borderRadius: 2 }}>
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.min(s.pct, 100)}%`,
-                        background: statusColor(s.status),
-                        borderRadius: 2,
-                      }}
-                    />
-                  </div>
-                </div>
-                <CommandCentreSparkLine data={pctTrendFromValue(s.pct)} />
-              </button>
+      <div>
+        {dashLoading ? (
+          <div className="mb-4 grid gap-4 sm:grid-cols-2">
+            {[1, 2].map((i) => (
+              <div
+                key={i}
+                className="min-h-[140px] animate-pulse rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-3.5"
+              />
             ))}
           </div>
-        </div>
+        ) : (
+          <div className="mb-4 grid gap-4 sm:grid-cols-2">
+            <div
+              className="rounded-lg border border-(--border) bg-[var(--bg-card)] p-3.5"
+              style={{ borderStyle: "solid" }}
+            >
+              <div className="mb-2.5 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <ListChecks className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                  <div className="min-w-0">
+                    <span className="block text-[11px] text-semibold uppercase tracking-[0.2em] text-(--alert-critical)">
+                      Important topics
+                    </span>
+                    {lastMeeting ? (
+                      <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">
+                        Selected meeting · {formatMeetingDate(lastMeeting.meetingDate)}
+                        {lastMeeting.title ? ` · ${lastMeeting.title}` : ""}
+                      </span>
+                    ) : (
+                      <span className="mt-0.5 block text-[10px] text-[var(--text-muted)]">No meeting on record</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/meetings")}
+                  className="shrink-0 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  Meetings →
+                </button>
+              </div>
+              {!lastMeeting || lastMeeting.topics.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {lastMeeting ? "No discussion topics were recorded for this meeting." : "Schedule a meeting to capture agenda topics."}
+                </p>
+              ) : (
+                <ol className="list-decimal space-y-2 pl-4 marker:text-[11px] marker:text-[var(--text-muted)]">
+                  {lastMeeting.topics.map((t) => (
+                    <li key={t.id} className="text-xs leading-snug text-[var(--text-primary)] pl-0.5">
+                      {t.topic}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-3.5"
+              style={{ borderStyle: "solid" }}
+            >
+              <div className="mb-2.5 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Presentation className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                  <div className="min-w-0">
+                    <span className="block text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                      Proposed Presentations by vertical
+                    </span>
+                    {lastMeeting ? (
+                      <span className="mt-0.5 block truncate text-[10px] text-[var(--text-muted)]">
+                        From selected meeting · {formatMeetingDate(lastMeeting.meetingDate)}
+                      </span>
+                    ) : (
+                      <span className="mt-0.5 block text-[10px] text-[var(--text-muted)]">No meeting on record</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/meetings")}
+                  className="shrink-0 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  Meetings →
+                </button>
+              </div>
+              <p className="mb-2 text-[10px] leading-snug text-[var(--text-muted)]">
+                Vertical is inferred when the file name contains a vertical name; otherwise files appear under Other.
+              </p>
+              {!lastMeeting || lastMeeting.presentationMaterials.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {lastMeeting
+                    ? "No presentation files were attached to this meeting."
+                    : "Upload decks on the Meetings page to show them here."}
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {presentationsByVertical.map(([vertical, files]) => (
+                    <li key={vertical}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                        {vertical}
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {files.map((f) => (
+                          <li key={f.id} className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => lastMeeting && void openUploadedMaterial(lastMeeting.id, f.id)}
+                              disabled={!lastMeeting || openingMaterialId === f.id}
+                              className="flex w-full min-w-0 items-start gap-1.5 rounded text-left text-xs text-[var(--text-primary)] underline-offset-2 hover:underline disabled:cursor-wait disabled:no-underline disabled:opacity-60"
+                              title={`Open ${f.fileName}`}
+                            >
+                              <ExternalLink
+                                className="mt-0.5 h-3 w-3 shrink-0 text-[var(--text-muted)]"
+                                aria-hidden
+                              />
+                              <span className="min-w-0 break-words">{f.fileName}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-4">
           <AiAlertsCard />
 
           <div
@@ -704,5 +697,35 @@ export default function CommandCentre({ setActive }: Props) {
         scheme={schemeModal}
       />
     </div>
+  );
+}
+
+function CommandCentreLoadingFallback() {
+  return (
+    <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2fr)", gap: 12 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "16px",
+              minHeight: 88,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function CommandCentre(props: Props) {
+  return (
+    <Suspense fallback={<CommandCentreLoadingFallback />}>
+      <CommandCentreContent {...props} />
+    </Suspense>
   );
 }
