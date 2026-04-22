@@ -4,20 +4,101 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import type { FinanceSummaryBreakdown } from "@/lib/financial-budget-entries";
 import { UserRole } from "@/lib/auth";
-import type { FinancialEntry, FinanceSummaryRow } from "@/types";
-import { fetchFinanceSummary } from "@/src/lib/services/financialService";
+import type {
+  FinanceYearBudgetAllocationLineRow,
+  FinanceYearBudgetCategory,
+  FinancialEntry,
+  FinanceSummaryRow,
+} from "@/types";
+import { fetchFinanceSummary, fetchFyBudgetAllocation } from "@/src/lib/services/financialService";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+
+/** Dashboard chart palette (financial overview). */
+const CHART_BUDGET_BLUE = "#2b428c";
+const CHART_IFMS_TEAL = "#2a8c82";
+const CHART_SO_GOLD = "#d6a033";
+const CHART_BURNT_ORANGE = "#bf5121";
+const CHART_GREEN = "#15803d";
+const CHART_GAUGE_TRACK = "var(--border)";
+
+function lineMap(lines: FinanceYearBudgetAllocationLineRow[]) {
+  return Object.fromEntries(lines.map((l) => [l.category, l])) as Record<
+    FinanceYearBudgetCategory,
+    FinanceYearBudgetAllocationLineRow | undefined
+  >;
+}
+
+function sumLines(
+  by: Record<FinanceYearBudgetCategory, FinanceYearBudgetAllocationLineRow | undefined>,
+  cats: FinanceYearBudgetCategory[],
+) {
+  return cats.reduce(
+    (acc, c) => {
+      const row = by[c];
+      return {
+        budgetEstimateCr: acc.budgetEstimateCr + (row?.budgetEstimateCr ?? 0),
+        soExpenditureCr: acc.soExpenditureCr + (row?.soExpenditureCr ?? 0),
+        ifmsExpenditureCr: acc.ifmsExpenditureCr + (row?.ifmsExpenditureCr ?? 0),
+      };
+    },
+    { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+  );
+}
+
+/** Four funding-source rows aligned with the reference dashboard. */
+function buildFundingSourceBarData(lines: FinanceYearBudgetAllocationLineRow[]) {
+  const by = lineMap(lines);
+  const state = sumLines(by, ["STATE_SCHEME", "CENTRAL_SECTOR_SCHEME"]);
+  const css = sumLines(by, ["CENTRALLY_SPONSORED_SCHEME"]);
+  const transfer = sumLines(by, ["STATE_FINANCE_COMMISSION", "UNION_FINANCE_COMMISSION", "OTHER_TRANSFER_STAMP_DUTY"]);
+  const admin = sumLines(by, ["ADMIN_EXPENDITURE"]);
+  return [
+    { name: "State Sector Scheme", ...state },
+    { name: "Centrally Sponsored Scheme", ...css },
+    { name: "Transfer from State", ...transfer },
+    { name: "Admin. Expenditure", ...admin },
+  ];
+}
+
+function transferExpenditureDonut(lines: FinanceYearBudgetAllocationLineRow[]) {
+  const by = lineMap(lines);
+  return [
+    {
+      name: "State Finance Commission",
+      value: by.STATE_FINANCE_COMMISSION?.ifmsExpenditureCr ?? 0,
+      fill: CHART_GREEN,
+    },
+    {
+      name: "Union Finance Commission",
+      value: by.UNION_FINANCE_COMMISSION?.ifmsExpenditureCr ?? 0,
+      fill: CHART_BURNT_ORANGE,
+    },
+    {
+      name: "Stamp Duty",
+      value: by.OTHER_TRANSFER_STAMP_DUTY?.ifmsExpenditureCr ?? 0,
+      fill: CHART_SO_GOLD,
+    },
+  ];
+}
+
+function utilisationPct(ifms: number, budget: number) {
+  if (!budget || budget <= 0) return 0;
+  return Math.min(100, (ifms / budget) * 100);
+}
 
 function formatCurrency(value: number) {
   return `₹${value.toFixed(1)} Cr`;
@@ -53,6 +134,8 @@ export default function FinancialOverviewClient({
   const [customCurrent, setCustomCurrent] = useState("");
   const [meetingA, setMeetingA] = useState("");
   const [meetingB, setMeetingB] = useState("");
+  const [fyAllocation, setFyAllocation] = useState<Awaited<ReturnType<typeof fetchFyBudgetAllocation>> | null>(null);
+  const [loadingFyAllocation, setLoadingFyAllocation] = useState(true);
 
   const summaryTotals = useMemo(() => {
     const totalBudget = entries.reduce((sum, entry) => sum + effBudget(entry), 0);
@@ -138,6 +221,24 @@ export default function FinancialOverviewClient({
   useEffect(() => {
     loadMeta();
   }, [loadMeta]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingFyAllocation(true);
+    fetchFyBudgetAllocation({ financialYearLabel: financialYearLabel ?? undefined })
+      .then((data) => {
+        if (alive) setFyAllocation(data);
+      })
+      .catch(() => {
+        if (alive) setFyAllocation(null);
+      })
+      .finally(() => {
+        if (alive) setLoadingFyAllocation(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [financialYearLabel]);
 
   useEffect(() => {
     if (preset === "none" || !resolvedDates.baseline || !resolvedDates.current) {
@@ -244,6 +345,43 @@ export default function FinancialOverviewClient({
     if (preset === "custom") return "Compares finance summary heads at two as-of dates.";
     return null;
   }, [preset]);
+
+  const fundingBarData = useMemo(
+    () => (fyAllocation?.lines?.length ? buildFundingSourceBarData(fyAllocation.lines) : []),
+    [fyAllocation?.lines],
+  );
+
+  const transferDonutData = useMemo(
+    () => (fyAllocation?.lines?.length ? transferExpenditureDonut(fyAllocation.lines) : []),
+    [fyAllocation?.lines],
+  );
+
+  const budgetUtilisation = useMemo(() => {
+    if (!fyAllocation?.lines?.length || !fyAllocation.totals || fyAllocation.totals.budgetEstimateCr <= 0) return null;
+    const rows = buildFundingSourceBarData(fyAllocation.lines);
+    const total = utilisationPct(fyAllocation.totals.ifmsExpenditureCr, fyAllocation.totals.budgetEstimateCr);
+    const breakdown = [
+      { label: "State", pct: utilisationPct(rows[0].ifmsExpenditureCr, rows[0].budgetEstimateCr) },
+      { label: "Centrally Sponsored", pct: utilisationPct(rows[1].ifmsExpenditureCr, rows[1].budgetEstimateCr) },
+      { label: "Transfer from State", pct: utilisationPct(rows[2].ifmsExpenditureCr, rows[2].budgetEstimateCr) },
+    ];
+    return { total, breakdown };
+  }, [fyAllocation]);
+
+  const fundingBarMax = useMemo(() => {
+    let m = 0;
+    for (const r of fundingBarData) {
+      m = Math.max(m, r.budgetEstimateCr, r.soExpenditureCr, r.ifmsExpenditureCr);
+    }
+    if (m <= 0) return 1000;
+    const step = 500;
+    return Math.ceil(m / step) * step;
+  }, [fundingBarData]);
+
+  const transferDonutTotal = useMemo(
+    () => transferDonutData.reduce((s, d) => s + d.value, 0),
+    [transferDonutData],
+  );
 
   return (
     <AppShell title="Financial Overview">
@@ -396,6 +534,168 @@ export default function FinancialOverviewClient({
             </div>
           ))}
         </div>
+
+        {(loadingFyAllocation || fundingBarData.length > 0) && (
+          <div className="grid gap-4 lg:grid-cols-12">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm lg:col-span-7">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-primary)]">
+                Budget estimate vs S.O. order vs expenditure (IFMS)
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">All 4 funding sources — ₹ in Crores (FY category allocation).</p>
+              {loadingFyAllocation ? (
+                <p className="mt-8 text-sm text-[var(--text-muted)]">Loading allocation…</p>
+              ) : (
+                <div className="mt-4 h-[320px] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart
+                      layout="vertical"
+                      data={fundingBarData}
+                      margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                      barCategoryGap="18%"
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        domain={[0, fundingBarMax]}
+                        tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                        tickFormatter={(v) => `${v}`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={148}
+                        tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--bg-card)",
+                          border: "1px solid var(--border)",
+                          fontSize: 12,
+                        }}
+                        formatter={(v) => [`${Number(v ?? 0).toFixed(1)} Cr`, ""]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar
+                        dataKey="budgetEstimateCr"
+                        name="Budget Estimate"
+                        fill={CHART_BUDGET_BLUE}
+                        radius={[0, 4, 4, 0]}
+                      />
+                      <Bar dataKey="ifmsExpenditureCr" name="Expenditure (IFMS)" fill={CHART_IFMS_TEAL} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="soExpenditureCr" name="S.O. Order" fill={CHART_SO_GOLD} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4 lg:col-span-5">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Budget utilisation</p>
+                {loadingFyAllocation ? (
+                  <p className="mt-6 text-sm text-[var(--text-muted)]">Loading…</p>
+                ) : budgetUtilisation ? (
+                  <>
+                    <div className="relative mx-auto mt-2 h-[200px] w-full max-w-[280px]">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: "used", value: budgetUtilisation.total },
+                              { name: "rest", value: Math.max(0, 100 - budgetUtilisation.total) },
+                            ]}
+                            cx="50%"
+                            cy="85%"
+                            startAngle={180}
+                            endAngle={0}
+                            innerRadius="58%"
+                            outerRadius="90%"
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            <Cell fill={CHART_GREEN} />
+                            <Cell fill={CHART_GAUGE_TRACK} />
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-1 text-center">
+                        <p className="text-3xl font-semibold tabular-nums text-[var(--text-primary)]">
+                          {budgetUtilisation.total.toFixed(1)}%
+                        </p>
+                        <p className="max-w-[200px] text-[11px] leading-tight text-[var(--text-muted)]">
+                          Total budget utilisation
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="mt-2 space-y-2 border-t border-[var(--border)] pt-3 text-sm">
+                      {budgetUtilisation.breakdown.map((row) => (
+                        <li key={row.label} className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[var(--text-secondary)]">{row.label}</span>
+                          <span
+                            className="shrink-0 font-medium tabular-nums"
+                            style={{ color: row.pct >= 75 ? CHART_GREEN : CHART_SO_GOLD }}
+                          >
+                            {row.pct.toFixed(1)}%
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm text-[var(--text-muted)]">No FY allocation totals yet.</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-primary)]">
+                  Transfer from State
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Expenditure distribution (IFMS, ₹ Cr).</p>
+                {loadingFyAllocation ? (
+                  <p className="mt-6 text-sm text-[var(--text-muted)]">Loading…</p>
+                ) : transferDonutTotal > 0 ? (
+                  <div className="mt-4 flex flex-col items-center">
+                    <div className="h-[220px] w-full max-w-[280px]">
+                      <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                          <Pie
+                            data={transferDonutData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="52%"
+                            outerRadius="78%"
+                            paddingAngle={2}
+                            dataKey="value"
+                            nameKey="name"
+                          >
+                            {transferDonutData.map((entry) => (
+                              <Cell key={entry.name} fill={entry.fill} stroke="var(--bg-card)" strokeWidth={1} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              background: "var(--bg-card)",
+                              border: "1px solid var(--border)",
+                              fontSize: 12,
+                            }}
+                            formatter={(v) => [`₹${Number(v ?? 0).toFixed(0)} Cr`, "IFMS"]}
+                          />
+                          <Legend
+                            verticalAlign="bottom"
+                            height={36}
+                            formatter={(value) => <span className="text-xs text-[var(--text-secondary)]">{value}</span>}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-[var(--text-muted)]">No transfer expenditure recorded for this year.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {totalsDelta && preset !== "none" && (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-secondary)]">

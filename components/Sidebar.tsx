@@ -287,7 +287,9 @@ export default function Sidebar() {
       <div className="px-6 py-5 border-b border-[var(--sidebar-border)] items-center justify-center flex">
         {/* <div className="text-sm font-semibold tracking-[0.6em] text-[var(--sidebar-text-muted)]">HUDD</div> */}
         {/* <div className="text-xs uppercase text-[var(--sidebar-text-muted)] mt-1">Government of Odisha</div> */}
-        <img src="/logo.png" alt="HUDD Logo" className="w-24 h-24" />
+        <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-2">
+          <img src="/logo.png" alt="HUDD Logo" className="max-h-full max-w-full object-contain" />
+        </div>
         {/* {user && (
           <div className="mt-3 flex flex-col gap-1">
             <div className="text-[13px] font-bold text-[var(--sidebar-text-primary)]">{user.name}</div>
