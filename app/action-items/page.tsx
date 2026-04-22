@@ -349,13 +349,17 @@ export default function ActionItemsPage() {
 
         {pageTab === "list" && !loading && filtered.length > 0 && (
           <div className="grid gap-4 md:grid-cols-1">
-            {filtered.map((item) => {
+            {filtered.map((item, index) => {
               const currentStatus = item.status === "OVERDUE" ? "OPEN" : item.status;
               const currentIndex = STATUS_STEPS.indexOf(currentStatus);
+              const cardToneClasses =
+                index % 2 === 0
+                  ? "border-[var(--border)] bg-[var(--bg-card)]"
+                  : "border-[var(--border)] bg-[var(--bg-alternate-card)]";
               return (
                 <div
                   key={item.id}
-                  className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition hover:border-[var(--border-strong)]"
+                  className={`relative overflow-hidden rounded-2xl border p-5 transition hover:border-[var(--border-strong)] ${cardToneClasses}`}
                 >
                   {/* <div className={`absolute left-0 top-0 h-full w-1 ${PRIORITY_COLORS[item.priority] ?? "bg-[var(--border)]"}`} /> */}
                   

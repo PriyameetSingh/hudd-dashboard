@@ -409,8 +409,14 @@ export default function KPIsPage() {
               {pendingQueue.length === 0 && (
                 <div className="text-sm text-[var(--text-muted)]">No KPI submissions awaiting your review.</div>
               )}
-              {pendingQueue.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 cursor-pointer hover:bg-[var(--bg-card)] transition" onClick={() => setViewKpi(item)}>
+              {pendingQueue.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`cursor-pointer rounded-2xl border border-[var(--border)] p-4 transition ${
+                    index % 2 === 0 ? "bg-[var(--bg-card)]" : "bg-[var(--bg-alternate-card)]"
+                  }`}
+                  onClick={() => setViewKpi(item)}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">{item.scheme}</p>
