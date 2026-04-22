@@ -6,11 +6,13 @@ import { useMemo, useEffect, useState, useCallback, Suspense } from "react";
 import {
   AlertTriangle,
   TrendingUp,
+  TrendingDown,
   Clock,
   ArrowUpRight,
   ListChecks,
   Presentation,
   ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchPendingApprovalSummaries } from "@/src/lib/services/approvalService";
@@ -70,6 +72,52 @@ const FP = {
   title: "#333333",
   track: "rgba(0, 0, 0, 0.08)",
 };
+
+/** Mock rows for “What changed since last meeting” (AI-style summary cards). */
+const MOCK_WHAT_CHANGED_SINCE_LAST_MEETING = [
+  {
+    id: "be",
+    title: "Budget Estimates",
+    status: "Unchanged at ₹10,726.87 Cr",
+    description: "BE/RE figures held steady from 1st meeting",
+    tone: "positive" as const,
+  },
+  {
+    id: "metro",
+    title: "Metro Project Note",
+    status: "Pending → Approved",
+    description: "Cabinet approval received for Metro Project Note",
+    tone: "positive" as const,
+  },
+  {
+    id: "waterfront",
+    title: "Waterfront EFC",
+    status: "Pending → Approved",
+    description: "EFC clearance secured for Waterfront project",
+    tone: "positive" as const,
+  },
+  {
+    id: "pothole",
+    title: "Pothole-Free Cities",
+    status: "Certificates: 93 of 115 ULBs",
+    description: "Compliance drive progressing across ULBs",
+    tone: "positive" as const,
+  },
+  {
+    id: "ebus",
+    title: "PM e-Bus Sewa",
+    status: "Action Complied",
+    description: "Compliance closed on PM e-Bus Sewa decision",
+    tone: "positive" as const,
+  },
+  {
+    id: "expenditure",
+    title: "Expenditure Booking",
+    status: "Still 0% (early FY)",
+    description: "First fortnight of FY — IFMS expenditure yet to begin",
+    tone: "negative" as const,
+  },
+];
 
 function SchemeFinancialProgressRow({
   name,
@@ -501,10 +549,64 @@ function CommandCentreContent({ setActive }: Props) {
                 </ul>
               )}
             </div>
+
+            <div
+              className="sm:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-content-surface)] p-4 shadow-sm"
+              style={{ borderStyle: "solid" }}
+            >
+              <div className="mb-4 flex flex-wrap items-start gap-3">
+                <button
+                  type="button"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                  aria-label="Expand what changed section"
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--text-primary)]">
+                    What changed since last meeting
+                  </h3>
+                  <p className="mt-1 text-[10px] leading-snug text-[var(--text-muted)]">
+                    Key changes from 1st (FY 2026–27) → 2nd (FY 2026–27) Review Meeting (AI-generated insights)
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {MOCK_WHAT_CHANGED_SINCE_LAST_MEETING.map((item) => {
+                  const positive = item.tone === "positive";
+                  const TrendIcon = positive ? TrendingUp : TrendingDown;
+                  const statusColor = positive ? FP.green : FP.red;
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-3.5"
+                    >
+                      <div className="mb-2 flex items-start gap-2">
+                        <TrendIcon
+                          className="mt-0.5 h-4 w-4 shrink-0"
+                          style={{ color: statusColor }}
+                          aria-hidden
+                        />
+                        <span className="text-xs font-semibold leading-snug text-[var(--text-primary)]">
+                          {item.title}
+                        </span>
+                      </div>
+                      <p
+                        className="text-xs font-semibold leading-snug"
+                        style={{ color: statusColor }}
+                      >
+                        {item.status}
+                      </p>
+                      <p className="mt-1.5 text-[10px] leading-snug text-[var(--text-muted)]">{item.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
-        <div className="flex flex-col gap-4">
+        {/* <div className="flex flex-col gap-4">
           <AiAlertsCard />
 
           <div
@@ -564,7 +666,7 @@ function CommandCentreContent({ setActive }: Props) {
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
 
         {!dashLoading && dashboard && (
           <div

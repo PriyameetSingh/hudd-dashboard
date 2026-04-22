@@ -556,9 +556,9 @@ export default function FinancialOverviewClient({
             <div className="flex flex-col gap-4">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
                 <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Utilisation</p>
-                <div className="relative mx-auto mt-2 h-[160px] w-full max-w-[260px]">
-                  <ResponsiveContainer width="100%" height={160}>
-                    <PieChart>
+                <div className="relative mx-auto mt-2 h-[168px] w-full max-w-[260px]">
+                  <ResponsiveContainer width="100%" height={168}>
+                    <PieChart margin={{ top: 4, right: 0, bottom: 8, left: 0 }}>
                       <Pie
                         data={[
                           { key: "used", value: Math.min(100, totalBudgetUtilisationPct), fill: CHART_BUDGET },
@@ -569,18 +569,18 @@ export default function FinancialOverviewClient({
                         startAngle={180}
                         endAngle={0}
                         innerRadius="58%"
-                        outerRadius="92%"
+                        outerRadius="88%"
                         dataKey="value"
                         stroke="none"
                         isAnimationActive={false}
                       />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-1 pt-6 text-center">
-                    <p className="text-3xl font-semibold tabular-nums text-[var(--text-primary)]">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-2 top-0 flex flex-col items-center justify-center px-2 pb-10 text-center">
+                    <p className="text-3xl font-semibold tabular-nums leading-none text-[var(--text-primary)]">
                       {totalBudgetUtilisationPct.toFixed(1)}%
                     </p>
-                    <p className="mt-0.5 max-w-[12rem] text-[11px] leading-snug text-[var(--text-muted)]">
+                    <p className="mt-1.5 max-w-[12rem] text-[11px] leading-snug text-[var(--text-muted)]">
                       Total budget utilisation
                     </p>
                   </div>
