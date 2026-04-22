@@ -75,9 +75,9 @@ async function fetchSessionDbUserId(): Promise<string | null> {
 }
 
 const BADGE_TONE_CLASS: Record<"red" | "yellow" | "green", string> = {
-  red: "text-red-600 dark:text-red-400",
-  yellow: "text-amber-600 dark:text-amber-400",
-  green: "text-emerald-600 dark:text-emerald-400",
+  red: "text-red-300",
+  yellow: "text-amber-300",
+  green: "text-emerald-300",
 };
 
 type NavItem = {

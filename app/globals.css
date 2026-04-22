@@ -16,10 +16,12 @@
   --text-primary: #0d1b2a;
   --text-secondary: #3a4f65;
   --text-muted: #6b7f94;
+  --text-on-dark-muted: #c7d8ea;
+  --text-on-dark-subtle: #a1bed9;
   --sidebar-text-primary: #ffffff;
-  --sidebar-text-muted: #7fa8cc;
-  --sidebar-active-bg: #1a3a5c;
-  --sidebar-hover-bg: #152d47;
+  --sidebar-text-muted: #a8c6df;
+  --sidebar-active-bg: #244d79;
+  --sidebar-hover-bg: #1d3d61;
   --alert-critical: #cc0000;
   --alert-warning: #b87700;
   --alert-success: #007700;
@@ -32,7 +34,16 @@
 }
 
 html {
+  font-size: 100%;
   scroll-behavior: smooth;
+}
+
+html[data-text-scale="lg"] {
+  font-size: 112.5%;
+}
+
+html[data-text-scale="xl"] {
+  font-size: 125%;
 }
 
 body {

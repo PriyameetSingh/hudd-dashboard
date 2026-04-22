@@ -4,6 +4,7 @@ import { Bell, User, Bot } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "@/components/ThemeProvider";
+import TextSizeToolbarControl from "@/components/TextSizeToolbarControl";
 import { getCurrentUser, UserRole } from "@/lib/auth";
 import ConversationalAI from "@/components/ConversationalAI";
 
@@ -51,9 +52,10 @@ export default function AppShell({ children, title }: Props) {
             <p className="text-lg font-medium text-[var(--sidebar-text-primary)]">Housing & Urban Development Department</p>
             {/* {title && <p className="text-sm text-[var(--text-muted)]">{title} xxcc</p>} */}
           </div>
-          <div className="flex items-center gap-6 text-sm text-[var(--text-muted)]">
+          <div className="flex flex-wrap items-center justify-end gap-4 text-sm text-[var(--text-on-dark-muted)]">
+            <TextSizeToolbarControl />
             <button
-              className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]"
+              className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-secondary)]"
               onClick={() => setChatOpen(true)}
               type="button"
             >
@@ -64,13 +66,13 @@ export default function AppShell({ children, title }: Props) {
               Live
             </div> */}
             <span>{mounted ? nowLabel : ""}</span>
-            <button className="relative text-[var(--text-muted)]">
+            <button className="relative text-[var(--text-on-dark-muted)]" aria-label="Notifications" type="button">
               <Bell size={18} />
               <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-[var(--alert-critical)]" />
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center">
-                <User size={16} className="text-[var(--text-muted)]" />
+                <User size={16} className="text-[var(--text-secondary)]" />
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { FontScaleProvider } from "@/components/FontScaleProvider";
 import { DataProvider } from "@/context/DataContext";
 import MockAuthProvider from "@/components/MockAuthProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -15,11 +16,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="h-full" data-scroll-behavior="smooth">
       <body className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
         <ThemeProvider>
-          <DataProvider>
-            {children}
-            <SpeedInsights />
-            <MockAuthProvider />
-          </DataProvider>
+          <FontScaleProvider>
+            <DataProvider>
+              {children}
+              <SpeedInsights />
+              <MockAuthProvider />
+            </DataProvider>
+          </FontScaleProvider>
         </ThemeProvider>
       </body>
     </html>

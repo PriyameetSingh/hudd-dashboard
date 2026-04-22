@@ -348,7 +348,7 @@ export default function ActionItemsPage() {
         )}
 
         {pageTab === "list" && !loading && filtered.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-1">
             {filtered.map((item) => {
               const currentStatus = item.status === "OVERDUE" ? "OPEN" : item.status;
               const currentIndex = STATUS_STEPS.indexOf(currentStatus);
@@ -357,29 +357,30 @@ export default function ActionItemsPage() {
                   key={item.id}
                   className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 transition hover:border-[var(--border-strong)]"
                 >
-                  <div className={`absolute left-0 top-0 h-full w-1 ${PRIORITY_COLORS[item.priority] ?? "bg-[var(--border)]"}`} />
-                  {item.status === "OVERDUE" && (
-                    <div className="mb-3 rounded-lg border border-[var(--alert-critical)] bg-[rgba(255,59,59,0.12)] px-3 py-1 text-xs text-[var(--alert-critical)]">
-                      {item.daysOverdue ?? 1} days overdue
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                  {/* <div className={`absolute left-0 top-0 h-full w-1 ${PRIORITY_COLORS[item.priority] ?? "bg-[var(--border)]"}`} /> */}
+                  
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <PriorityBadge priority={item.priority} />
-                        <span className="rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                        <PriorityBadge priority={item.priority} size="md" />
+                        <span className="inline-flex max-w-full items-center rounded-full border border-[var(--border)] bg-[var(--accent)] px-2.5 py-1 text-[10px] font-semibold uppercase leading-none tracking-[0.2em] text-[var(--accent-text)]">
                           {item.vertical}
                         </span>
+                        {item.status === "OVERDUE" && (
+                          <span className="inline-flex items-center rounded-full border border-[var(--alert-critical)] bg-[rgba(255,59,59,0.12)] px-2.5 py-1 text-[10px] font-semibold leading-none tracking-wide text-[var(--alert-critical)]">
+                            {item.daysOverdue ?? 1} days overdue
+                          </span>
+                        )}
                       </div>
-                      <h3 className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{item.title}</h3>
-                      <p className="mt-2 text-sm text-[var(--text-muted)]">{item.description}</p>
+                      <h3 className="mt-3 text-lg font-semibold leading-snug text-[var(--text-primary)]">{item.title}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.description}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <StatusBadge status={item.status} />
-                      <span className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">{item.schemeId}</span>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <StatusBadge status={item.status} size="md" />
+                      <span className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-secondary)]">{item.schemeId}</span>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
+                  <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-normal text-[var(--text-secondary)]">
                     <span>Assigned to {item.assignedTo}</span>
                     <span>·</span>
                     <span>Reviewer {item.reviewer}</span>
@@ -389,11 +390,11 @@ export default function ActionItemsPage() {
                     <span>{item.vertical}</span>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-[var(--text-muted)]">
+                  <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em]">
                     {STATUS_STEPS.map((step, index) => (
                       <span
                         key={step}
-                        className={`rounded-full border px-2 py-1 ${index <= currentIndex ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-primary)]" : "border-[var(--border)]"}`}
+                        className={`rounded-full border px-2.5 py-1 leading-none ${index <= currentIndex ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-card)]" : "border-[var(--border-strong)] text-[var(--text-secondary)]"}`}
                       >
                         {step.replace(/_/g, " ")}
                       </span>
@@ -403,7 +404,7 @@ export default function ActionItemsPage() {
                   <div className="mt-5 flex flex-wrap items-center gap-2">
                     <Link
                       href={`/action-items/${item.id}`}
-                      className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-primary)]"
+                      className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--text-primary)]"
                     >
                       View Details
                     </Link>
@@ -416,7 +417,7 @@ export default function ActionItemsPage() {
                     {canReassignActionItems && (
                       <button
                         type="button"
-                        className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]"
+                        className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--text-primary)]"
                         onClick={() => openReassignModal(item)}
                       >
                         Reassign
@@ -428,10 +429,10 @@ export default function ActionItemsPage() {
                       item.status === "UNDER_REVIEW" &&
                       isDesignatedReviewer(item, user) && (
                       <>
-                        <button type="button" className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">
+                        <button type="button" className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--text-primary)]">
                           Approve
                         </button>
-                        <button type="button" className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)]">
+                        <button type="button" className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg-card)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--text-primary)]">
                           Reject
                         </button>
                       </>
