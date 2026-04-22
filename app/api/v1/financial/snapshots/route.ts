@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateFinancialCaches } from "@/lib/cached-financial-metadata";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
     );
 
     await syncSchemeFyCategoryLines(fy.id, createdBy?.id ?? null);
+    revalidateFinancialCaches();
 
     return NextResponse.json({ ok: true });
   } catch (error) {

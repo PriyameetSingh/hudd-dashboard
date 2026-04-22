@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseListLimit } from "@/lib/list-query-limit";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+
+    const take = parseListLimit(new URL(request.url).searchParams);
 
     const meetings = await prisma.dashboardMeeting.findMany({
       orderBy: { meetingDate: "desc" },
@@ -20,6 +23,7 @@ export async function GET() {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true },
         },
       },
+      take,
     });
 
     return NextResponse.json({
@@ -33,6 +37,7 @@ export async function GET() {
         actionItems: m.actionItems,
         materials: m.materials,
       })),
+      limit: take,
     });
   } catch (error) {
     const auth = toAuthErrorResponse(error);

@@ -168,12 +168,12 @@ const items: NavItem[] = [
     icon: CalendarDays,
     roles: [UserRole.TASU, UserRole.AS, UserRole.PS_HUDD, UserRole.ACS],
   },
-  {
-    label: "Reports & Export",
-    href: "/reports",
-    icon: FileText,
-    roles: [UserRole.AS, UserRole.PS_HUDD, UserRole.ACS],
-  },
+  // {
+  //   label: "Reports & Export",
+  //   href: "/reports",
+  //   icon: FileText,
+  //   roles: [UserRole.AS, UserRole.PS_HUDD, UserRole.ACS],
+  // },
   {
     label: "Execution Efficiency",
     href: "/financial/execution-efficiency",

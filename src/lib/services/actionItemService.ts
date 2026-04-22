@@ -2,6 +2,8 @@ import { ActionItem } from "@/types";
 
 type ActionItemsResponse = {
   items: ActionItem[];
+  /** Server-side cap when `?limit=` omitted (default 1000, max 2000). */
+  limit?: number;
 };
 
 type ActionItemResponse = {

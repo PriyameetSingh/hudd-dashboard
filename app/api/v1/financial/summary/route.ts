@@ -6,8 +6,8 @@ import {
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
   FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES,
 } from "@/lib/finance-year-budget-allocation";
+import { revalidateFinancialCaches } from "@/lib/cached-financial-metadata";
 import { aggregateSnapshotTotalsBySchemeBucket } from "@/lib/finance-summary-asof";
-import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
 import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 
@@ -64,8 +64,7 @@ export async function GET(request: NextRequest) {
     const responseAsOf: string | null = asOfDate?.toISOString().slice(0, 10) ?? null;
 
     if (!asOfDate) {
-      await syncSchemeFyCategoryLines(fy.id, null);
-      const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+      const allocation = await syncSchemeFyCategoryLines(fy.id, null);
       const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
       const rows = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
         const row = lineByCategory.get(category);
@@ -125,8 +124,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await syncSchemeFyCategoryLines(fy.id, null);
-    const allocation = await ensureFyBudgetAllocationWithLines(fy.id, null);
+    const allocation = await syncSchemeFyCategoryLines(fy.id, null);
     const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
     const bucketExp = await aggregateSnapshotTotalsBySchemeBucket(fy.id, asOfDate);
 
@@ -211,14 +209,21 @@ export async function POST(request: NextRequest) {
     const asOfDate = new Date(`${body.asOfDate}T00:00:00.000Z`);
     const auditContext = getAuditRequestContext(request);
 
+    const headCodes = (body.rows ?? []).map((r) => r.headCode);
+    const beforeRows =
+      headCodes.length === 0
+        ? []
+        : await prisma.financeSummaryHead.findMany({
+            where: {
+              financialYearId: fy.id,
+              asOfDate,
+              headCode: { in: headCodes },
+            },
+          });
+    const beforeByHeadCode = new Map(beforeRows.map((h) => [h.headCode, h]));
+
     for (const row of body.rows ?? []) {
-      const before = await prisma.financeSummaryHead.findFirst({
-        where: {
-          financialYearId: fy.id,
-          headCode: row.headCode,
-          asOfDate,
-        },
-      });
+      const before = beforeByHeadCode.get(row.headCode) ?? null;
 
       const saved = await prisma.financeSummaryHead.upsert({
         where: {
@@ -267,6 +272,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    revalidateFinancialCaches();
     return NextResponse.json({ ok: true });
   } catch (error) {
     const auth = toAuthErrorResponse(error);

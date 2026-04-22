@@ -3,8 +3,9 @@ import { KPICategory, KPIType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import {
-  userCanEnterKpiMeasurement,
-  userCanReviewKpiMeasurement,
+  groupKpiAssignmentsBySchemeId,
+  userCanEnterKpiMeasurementSync,
+  userCanReviewKpiMeasurementSync,
   userRoleIdsFromDbUser,
 } from "@/lib/kpi-access";
 import {
@@ -75,8 +76,24 @@ export async function GET() {
     const canEnterPermission = hasPermissionForUser(actor, "ENTER_KPI_DATA");
     const canApprovePermission = hasPermissionForUser(actor, "APPROVE_KPI");
 
-    const submissions = await Promise.all(
-      definitions.map(async (definition: (typeof definitions)[number]) => {
+    const schemeIds = [...new Set(definitions.map((d) => d.schemeId))];
+    const [kpiOwner1Rows, kpiOwner2Rows] =
+      schemeIds.length === 0
+        ? [[], []]
+        : await Promise.all([
+            prisma.schemeAssignment.findMany({
+              where: { schemeId: { in: schemeIds }, assignmentKind: "kpi_owner_1" },
+              select: { schemeId: true, userId: true, roleId: true },
+            }),
+            prisma.schemeAssignment.findMany({
+              where: { schemeId: { in: schemeIds }, assignmentKind: "kpi_owner_2" },
+              select: { schemeId: true, userId: true, roleId: true },
+            }),
+          ]);
+    const kpiOwner1BySchemeId = groupKpiAssignmentsBySchemeId(kpiOwner1Rows);
+    const kpiOwner2BySchemeId = groupKpiAssignmentsBySchemeId(kpiOwner2Rows);
+
+    const submissions = definitions.map((definition: (typeof definitions)[number]) => {
         const target = definition.targets[0] ?? null;
         const measurement = target?.measurements[0] ?? null;
 
@@ -86,14 +103,12 @@ export async function GET() {
           reviewerId: definition.reviewerId,
         };
 
-        const [currentUserCanEnter, currentUserCanReview] = await Promise.all([
-          canEnterPermission
-            ? userCanEnterKpiMeasurement(defPick, actor?.id, roleIds, canManageSchemes)
-            : Promise.resolve(false),
-          canApprovePermission
-            ? userCanReviewKpiMeasurement(defPick, actor?.id, roleIds, canManageSchemes)
-            : Promise.resolve(false),
-        ]);
+        const currentUserCanEnter =
+          canEnterPermission &&
+          userCanEnterKpiMeasurementSync(defPick, actor?.id, roleIds, canManageSchemes, kpiOwner1BySchemeId);
+        const currentUserCanReview =
+          canApprovePermission &&
+          userCanReviewKpiMeasurementSync(defPick, actor?.id, roleIds, canManageSchemes, kpiOwner2BySchemeId);
 
         return {
           id: definition.id,
@@ -120,8 +135,7 @@ export async function GET() {
           currentUserCanReview,
           currentUserCanReassignOwners: canManageSchemes,
         };
-      }),
-    );
+      });
 
     return NextResponse.json({
       financialYearLabel: fy?.label ?? null,

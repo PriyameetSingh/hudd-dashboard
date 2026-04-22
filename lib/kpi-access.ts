@@ -63,6 +63,68 @@ export async function assertKpiReviewerForDefinition(
   await assertKpiReviewerForScheme(definition.schemeId, userId, userRoleIds);
 }
 
+export type KpiSchemeAssignmentRow = {
+  schemeId: string;
+  userId: string | null;
+  roleId: string | null;
+};
+
+function ownersMatchAssignment(
+  owners: Array<{ userId: string | null; roleId: string | null }>,
+  userId: string | undefined,
+  userRoleIds: string[],
+): boolean {
+  if (owners.length === 0) return true;
+  return owners.some(
+    (o) => (o.userId && userId && o.userId === userId) || (o.roleId && userRoleIds.includes(o.roleId)),
+  );
+}
+
+/** Group scheme_assignment rows by schemeId for batched KPI permission checks. */
+export function groupKpiAssignmentsBySchemeId(
+  rows: KpiSchemeAssignmentRow[],
+): Map<string, Array<{ userId: string | null; roleId: string | null }>> {
+  const m = new Map<string, Array<{ userId: string | null; roleId: string | null }>>();
+  for (const r of rows) {
+    const list = m.get(r.schemeId) ?? [];
+    list.push({ userId: r.userId, roleId: r.roleId });
+    m.set(r.schemeId, list);
+  }
+  return m;
+}
+
+/** In-memory equivalent of {@link userCanEnterKpiMeasurement} using preloaded kpi_owner_1 rows. */
+export function userCanEnterKpiMeasurementSync(
+  definition: DefinitionUpdater,
+  userId: string | undefined,
+  userRoleIds: string[],
+  canManageSchemes: boolean,
+  kpiOwner1BySchemeId: Map<string, Array<{ userId: string | null; roleId: string | null }>>,
+): boolean {
+  if (canManageSchemes) return true;
+  if (definition.assignedToId) {
+    return !!(userId && definition.assignedToId === userId);
+  }
+  const owners = kpiOwner1BySchemeId.get(definition.schemeId) ?? [];
+  return ownersMatchAssignment(owners, userId, userRoleIds);
+}
+
+/** In-memory equivalent of {@link userCanReviewKpiMeasurement} using preloaded kpi_owner_2 rows. */
+export function userCanReviewKpiMeasurementSync(
+  definition: DefinitionReviewer,
+  userId: string | undefined,
+  userRoleIds: string[],
+  canManageSchemes: boolean,
+  kpiOwner2BySchemeId: Map<string, Array<{ userId: string | null; roleId: string | null }>>,
+): boolean {
+  if (canManageSchemes) return true;
+  if (definition.reviewerId) {
+    return !!(userId && definition.reviewerId === userId);
+  }
+  const owners = kpiOwner2BySchemeId.get(definition.schemeId) ?? [];
+  return ownersMatchAssignment(owners, userId, userRoleIds);
+}
+
 export function userRoleIdsFromDbUser(user: { userRoles: Array<{ roleId: string }> } | null | undefined): string[] {
   if (!user) return [];
   return user.userRoles.map((ur) => ur.roleId);

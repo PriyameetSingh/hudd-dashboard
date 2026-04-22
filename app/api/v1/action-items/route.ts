@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ActionItemPriority, ActionItemStatus, ActionItemType } from "@prisma/client";
+import { parseListLimit } from "@/lib/list-query-limit";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
@@ -62,9 +63,11 @@ function mapActionItem(item: {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireAnyPermission("VIEW_ALL_DATA", "VIEW_ASSIGNED_DATA");
+
+    const take = parseListLimit(new URL(request.url).searchParams);
 
     const items = await prisma.actionItem.findMany({
       include: {
@@ -85,10 +88,12 @@ export async function GET() {
         },
       },
       orderBy: [{ dueDate: "asc" }, { title: "asc" }],
+      take,
     });
 
     return NextResponse.json({
       items: items.map(mapActionItem),
+      limit: take,
     });
   } catch (error) {
     const auth = toAuthErrorResponse(error);
@@ -151,8 +156,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const assignedTo = await prisma.user.findFirst({ where: { code: body.assignedToUserCode } });
-    const reviewer = await prisma.user.findFirst({ where: { code: body.reviewerUserCode } });
+    const [assignedTo, reviewer] = await Promise.all([
+      prisma.user.findFirst({ where: { code: body.assignedToUserCode } }),
+      prisma.user.findFirst({ where: { code: body.reviewerUserCode } }),
+    ]);
     if (!assignedTo || !reviewer) {
       return NextResponse.json({ detail: "Assignee or reviewer user not found" }, { status: 400 });
     }

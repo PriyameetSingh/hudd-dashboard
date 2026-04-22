@@ -261,7 +261,7 @@ model Scheme {
   actionItems         ActionItem[]
   supplements FinanceBudgetSupplement[]
 
-
+  @@index([verticalId])
   @@map("schemes")
 }
 
@@ -341,6 +341,7 @@ model FinanceBudget {
   revisions FinanceBudgetRevision[]
 
   @@unique([schemeId, subschemeId, financialYearId])
+  @@index([financialYearId])
   @@map("finance_budgets")
 }
 
@@ -356,6 +357,7 @@ model FinanceBudgetRevision {
   financeBudget FinanceBudget @relation(fields: [financeBudgetId], references: [id], onDelete: Cascade)
   createdBy     User?         @relation("FinanceBudgetRevisionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@index([financeBudgetId])
   @@map("finance_budget_revisions")
 }
 
@@ -425,6 +427,7 @@ model KpiDefinition {
 
   targets KpiTarget[]
 
+  @@index([schemeId])
   @@map("kpi_definitions")
 }
 
@@ -481,6 +484,7 @@ model DashboardMeeting {
   actionItems ActionItem[]
   materials  MeetingMaterial[]
 
+  @@index([meetingDate])
   @@map("dashboard_meetings")
 }
 
@@ -494,6 +498,7 @@ model MeetingTopic {
   meeting   DashboardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   createdBy User?            @relation("MeetingTopicCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@index([meetingId])
   @@map("meeting_topics")
 }
 
@@ -545,6 +550,8 @@ model ActionItem {
   updates ActionItemUpdate[]
   proofs  ActionItemProof[]
 
+  @@index([status, dueDate])
+  @@index([meetingId])
   @@map("action_items")
 }
 

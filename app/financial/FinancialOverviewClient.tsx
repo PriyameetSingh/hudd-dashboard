@@ -13,6 +13,8 @@ import {
   Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,6 +23,71 @@ import {
 
 function formatCurrency(value: number) {
   return `₹${value.toFixed(1)} Cr`;
+}
+
+const CHART_BUDGET = "#1e3a8a";
+const CHART_IFMS = "#0d9488";
+const CHART_SO = "#ea580c";
+
+type FundingBarRow = {
+  name: string;
+  budgetEstimateCr: number;
+  soExpenditureCr: number;
+  ifmsExpenditureCr: number;
+};
+
+function buildFundingOverviewRows(rows: FinanceSummaryRow[]): FundingBarRow[] {
+  const byCode = new Map(rows.map((r) => [r.headCode, r]));
+  const g = (code: string) => byCode.get(code);
+  const transferCodes = ["STATE_FINANCE_COMMISSION", "UNION_FINANCE_COMMISSION", "OTHER_TRANSFER_STAMP_DUTY"] as const;
+  const transfer = transferCodes.reduce(
+    (acc, c) => {
+      const r = g(c);
+      return {
+        budgetEstimateCr: acc.budgetEstimateCr + (r?.budgetEstimateCr ?? 0),
+        soExpenditureCr: acc.soExpenditureCr + (r?.soExpenditureCr ?? 0),
+        ifmsExpenditureCr: acc.ifmsExpenditureCr + (r?.ifmsExpenditureCr ?? 0),
+      };
+    },
+    { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
+  );
+  return [
+    {
+      name: "State Sector Scheme",
+      budgetEstimateCr: g("STATE_SCHEME")?.budgetEstimateCr ?? 0,
+      soExpenditureCr: g("STATE_SCHEME")?.soExpenditureCr ?? 0,
+      ifmsExpenditureCr: g("STATE_SCHEME")?.ifmsExpenditureCr ?? 0,
+    },
+    {
+      name: "Centrally Sponsored Scheme",
+      budgetEstimateCr: g("CENTRALLY_SPONSORED_SCHEME")?.budgetEstimateCr ?? 0,
+      soExpenditureCr: g("CENTRALLY_SPONSORED_SCHEME")?.soExpenditureCr ?? 0,
+      ifmsExpenditureCr: g("CENTRALLY_SPONSORED_SCHEME")?.ifmsExpenditureCr ?? 0,
+    },
+    {
+      name: "Central Sector Scheme",
+      budgetEstimateCr: g("CENTRAL_SECTOR_SCHEME")?.budgetEstimateCr ?? 0,
+      soExpenditureCr: g("CENTRAL_SECTOR_SCHEME")?.soExpenditureCr ?? 0,
+      ifmsExpenditureCr: g("CENTRAL_SECTOR_SCHEME")?.ifmsExpenditureCr ?? 0,
+    },
+    {
+      name: "Transfer From State",
+      budgetEstimateCr: transfer.budgetEstimateCr,
+      soExpenditureCr: transfer.soExpenditureCr,
+      ifmsExpenditureCr: transfer.ifmsExpenditureCr,
+    },
+    {
+      name: "Admin. Expenditure",
+      budgetEstimateCr: g("ADMIN_EXPENDITURE")?.budgetEstimateCr ?? 0,
+      soExpenditureCr: g("ADMIN_EXPENDITURE")?.soExpenditureCr ?? 0,
+      ifmsExpenditureCr: g("ADMIN_EXPENDITURE")?.ifmsExpenditureCr ?? 0,
+    },
+  ];
+}
+
+function utilisationPct(ifms: number, budget: number) {
+  if (!budget || budget <= 0) return 0;
+  return Math.min(100, (ifms / budget) * 100);
 }
 
 function effBudget(entry: FinancialEntry) {
@@ -245,6 +312,50 @@ export default function FinancialOverviewClient({
     return null;
   }, [preset]);
 
+  const fundingBarData = useMemo(() => {
+    if (!activeHeadSummary?.rows.length) return [];
+    return buildFundingOverviewRows(activeHeadSummary.rows);
+  }, [activeHeadSummary]);
+
+  const totalBudgetUtilisationPct = useMemo(() => {
+    if (!activeHeadSummary?.totals) return 0;
+    return utilisationPct(
+      activeHeadSummary.totals.ifmsExpenditureCr,
+      activeHeadSummary.totals.budgetEstimateCr,
+    );
+  }, [activeHeadSummary]);
+
+  const schemeGaugeRows = useMemo(() => {
+    if (!activeHeadSummary?.rows.length) return [];
+    const byCode = new Map(activeHeadSummary.rows.map((r) => [r.headCode, r]));
+    const mk = (code: string, shortLabel: string) => {
+      const r = byCode.get(code);
+      const b = r?.budgetEstimateCr ?? 0;
+      const i = r?.ifmsExpenditureCr ?? 0;
+      return { shortLabel, pct: utilisationPct(i, b) };
+    };
+    return [
+      mk("STATE_SCHEME", "State"),
+      mk("CENTRALLY_SPONSORED_SCHEME", "Centrally Sponsored"),
+      mk("CENTRAL_SECTOR_SCHEME", "Central"),
+    ];
+  }, [activeHeadSummary]);
+
+  const transferDistributionRows = useMemo(() => {
+    if (!activeHeadSummary?.rows.length) return [];
+    const byCode = new Map(activeHeadSummary.rows.map((r) => [r.headCode, r]));
+    const codes = ["STATE_FINANCE_COMMISSION", "UNION_FINANCE_COMMISSION", "OTHER_TRANSFER_STAMP_DUTY"] as const;
+    const dotClass = ["bg-emerald-500", "bg-orange-500", "bg-amber-400"] as const;
+    return codes.map((code, idx) => {
+      const r = byCode.get(code);
+      return {
+        label: r?.label ?? code,
+        ifmsCr: r?.ifmsExpenditureCr ?? 0,
+        dotClass: dotClass[idx],
+      };
+    });
+  }, [activeHeadSummary]);
+
   return (
     <AppShell title="Financial Overview">
       <div className="relative space-y-6 px-6 py-6">
@@ -396,6 +507,114 @@ export default function FinancialOverviewClient({
             </div>
           ))}
         </div>
+
+        {fundingBarData.length > 0 && (
+          <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 lg:col-span-2">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
+                Budget estimate vs S.O. order vs expenditure (IFMS)
+              </p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">All funding sources • ₹ in Crores</p>
+              <div className="mt-4 h-[340px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart
+                    layout="vertical"
+                    data={fundingBarData}
+                    margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                    barCategoryGap="18%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                      tickFormatter={(v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={148}
+                      reversed
+                      tick={{ fontSize: 11, fill: "var(--text-primary)" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border)",
+                        fontSize: 12,
+                      }}
+                      formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)} Cr`, String(name ?? "")]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="budgetEstimateCr" name="Budget estimate" fill={CHART_BUDGET} radius={[0, 4, 4, 0]} barSize={14} />
+                    <Bar dataKey="ifmsExpenditureCr" name="Expenditure (IFMS)" fill={CHART_IFMS} radius={[0, 4, 4, 0]} barSize={14} />
+                    <Bar dataKey="soExpenditureCr" name="S.O. order" fill={CHART_SO} radius={[0, 4, 4, 0]} barSize={14} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Utilisation</p>
+                <div className="relative mx-auto mt-2 h-[160px] w-full max-w-[260px]">
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { key: "used", value: Math.min(100, totalBudgetUtilisationPct), fill: CHART_BUDGET },
+                          { key: "rest", value: Math.max(0, 100 - Math.min(100, totalBudgetUtilisationPct)), fill: "var(--border)" },
+                        ]}
+                        cx="50%"
+                        cy="100%"
+                        startAngle={180}
+                        endAngle={0}
+                        innerRadius="58%"
+                        outerRadius="92%"
+                        dataKey="value"
+                        stroke="none"
+                        isAnimationActive={false}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-1 pt-6 text-center">
+                    <p className="text-3xl font-semibold tabular-nums text-[var(--text-primary)]">
+                      {totalBudgetUtilisationPct.toFixed(1)}%
+                    </p>
+                    <p className="mt-0.5 max-w-[12rem] text-[11px] leading-snug text-[var(--text-muted)]">
+                      Total budget utilisation
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-2 space-y-2 border-t border-[var(--border)] pt-3 text-sm">
+                  {schemeGaugeRows.map((row) => (
+                    <li key={row.shortLabel} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[var(--text-muted)]">{row.shortLabel}</span>
+                      <span className="shrink-0 font-medium tabular-nums text-rose-600 dark:text-rose-400">
+                        {row.pct.toFixed(1)}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--text-muted)]">Transfer from state</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Expenditure distribution</p>
+                <ul className="mt-4 space-y-3">
+                  {transferDistributionRows.map((row) => (
+                    <li key={row.label} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${row.dotClass}`} />
+                        <span className="truncate text-[var(--text-primary)]">{row.label}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-[var(--text-secondary)]">{formatCurrency(row.ifmsCr)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
 
         {totalsDelta && preset !== "none" && (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm text-[var(--text-secondary)]">
@@ -558,116 +777,7 @@ export default function FinancialOverviewClient({
           </div>
         )}
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheme entries</p>
-              <p className="text-sm text-[var(--text-muted)]">
-                Per-scheme budgets, scheme components, and revision history from the database. Point-in-time deltas for each scheme
-                require historical reconstruction; use summary comparison above for official head movement.
-              </p>
-            </div>
-            <span className="text-xs text-[var(--text-muted)]">{entries.length} schemes</span>
-          </div>
-
-          {entries.length === 0 && (
-            <div className="mt-4 text-sm text-[var(--text-muted)]">No schemes or financial year configured.</div>
-          )}
-
-          {entries.length > 0 && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="py-3 pr-4">Scheme / Subscheme</th>
-                    <th className="py-3 pr-4">Vertical</th>
-                    <th className="py-3 pr-4">Budget (₹ Cr)</th>
-                    <th className="py-3 pr-4">SO (₹ Cr)</th>
-                    <th className="py-3 pr-4">IFMS (₹ Cr)</th>
-                    <th className="py-3">% as per IFMS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => {
-                    const subs = entry.subschemes ?? [];
-                    const hasSubs = subs.length > 0;
-                    const hasNumericSubs = subs.some(
-                      (s) =>
-                        (s.annualBudget !== undefined && s.annualBudget > 0) ||
-                        (s.so !== undefined && s.so > 0) ||
-                        (s.ifms !== undefined && s.ifms > 0),
-                    );
-                    const pctParent = effBudget(entry) ? ((entry.ifms / effBudget(entry)) * 100).toFixed(1) : "0.0";
-                    return (
-                      <React.Fragment key={entry.id}>
-                        <tr
-                          className={`border-b border-[var(--border)] text-[var(--text-primary)] ${hasSubs ? "bg-[var(--bg-card)]" : ""}`}
-                        >
-                          <td className="py-3 pr-4 font-semibold">
-                            <span className="mr-1.5 font-mono text-xs text-[var(--text-muted)]">{entry.id}</span>
-                            {entry.scheme}
-                            {hasSubs && hasNumericSubs && (
-                              <span className="ml-2 text-[10px] font-normal uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                                derived
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 pr-4 text-[var(--text-muted)]">{entry.vertical}</td>
-                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{effBudget(entry).toFixed(1)}</td>
-                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.so.toFixed(1)}</td>
-                          <td className="py-3 pr-4 text-[var(--text-secondary)]">{entry.ifms.toFixed(1)}</td>
-                          <td className="py-3">{pctParent}%</td>
-                        </tr>
-                        {hasSubs &&
-                          subs.map((sub) => (
-                            <tr
-                              key={`${entry.id}-${sub.code}`}
-                              className="border-b border-[var(--border)] text-[var(--text-muted)]"
-                            >
-                              <td className="py-2 pr-4 pl-6">
-                                <span className="text-[var(--text-muted)] mr-1.5">↳</span>
-                                <span className="font-mono text-xs font-medium text-[var(--text-primary)]">{sub.code}</span>
-                                <span className="ml-1.5 text-[11px]">{sub.name}</span>
-                              </td>
-                              <td className="py-2 pr-4" />
-                              <td className="py-2 pr-4">{(sub.annualBudget ?? 0).toFixed(1)}</td>
-                              <td className="py-2 pr-4">{(sub.so ?? 0).toFixed(1)}</td>
-                              <td className="py-2 pr-4">{(sub.ifms ?? 0).toFixed(1)}</td>
-                              <td className="py-2">
-                                {(sub.annualBudget ?? 0)
-                                  ? (((sub.ifms ?? 0) / (sub.annualBudget ?? 1)) * 100).toFixed(1)
-                                  : "0.0"}
-                                %
-                              </td>
-                            </tr>
-                          ))}
-                        {(entry.updates?.length ?? 0) > 0 && (
-                          <tr className="border-b border-[var(--border)] bg-[var(--bg-surface)]/40">
-                            <td className="py-2 pr-4 pl-4 text-xs text-[var(--text-muted)]" colSpan={6}>
-                              <span className="font-semibold uppercase tracking-wide text-[10px] text-[var(--text-muted)]">
-                                Budget revisions
-                              </span>
-                              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[var(--text-secondary)]">
-                                {entry.updates!.map((u, i) => (
-                                  <li key={`${entry.id}-rev-${i}`}>
-                                    <span className="text-[var(--text-muted)]">{u.timestamp}</span>
-                                    {u.actor ? ` · ${u.actor}` : ""}
-                                    {u.note ? ` — ${u.note}` : ""}
-                                  </li>
-                                ))}
-                              </ul>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-      </div>
     </AppShell>
   );
 }

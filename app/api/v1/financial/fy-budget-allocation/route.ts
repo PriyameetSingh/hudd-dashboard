@@ -7,6 +7,7 @@ import {
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
   FINANCE_YEAR_MANUAL_BUDGET_CATEGORIES,
 } from "@/lib/finance-year-budget-allocation";
+import { revalidateFinancialCaches } from "@/lib/cached-financial-metadata";
 import { ensureFyBudgetAllocationWithLines } from "@/lib/server/ensure-fy-budget-allocation";
 import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
@@ -46,8 +47,7 @@ export async function GET(request: NextRequest) {
         totals: { budgetEstimateCr: 0, soExpenditureCr: 0, ifmsExpenditureCr: 0 },
       });
     }
-    await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
-    const allocation = await ensureFyBudgetAllocationWithLines(fy.id, actor?.id ?? null);
+    const allocation = await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
 
     const lineByCategory = new Map(allocation.categoryLines.map((l) => [l.category, l]));
     const lines = FINANCE_YEAR_BUDGET_CATEGORY_ORDER.map((category) => {
@@ -176,6 +176,8 @@ export async function PUT(request: NextRequest) {
       },
       { ...auditContext, financialYearId: fy.id },
     );
+
+    revalidateFinancialCaches();
 
     return NextResponse.json({ ok: true });
   } catch (error) {

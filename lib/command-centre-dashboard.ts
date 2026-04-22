@@ -133,38 +133,40 @@ export async function getCommandCentreDashboard(
 
   const verticalNames = verticalRows.map((v) => v.name);
 
-  const [{ entries, financialYearLabel }, overdueItems, trendRows, lastMeetingRow] = await Promise.all([
-    getFinancialBudgetEntriesOverview(actor),
-    prisma.actionItem.findMany({
-      where: { status: "OVERDUE" },
-      orderBy: { dueDate: "asc" },
-      take: 5,
-      include: {
-        assignedTo: { select: { name: true } },
-      },
-    }),
-    fyRow
-      ? prisma.financeExpenditureSnapshot.groupBy({
-          by: ["asOfDate"],
-          where: { financialYearId: fyRow.id },
-          _sum: { ifmsExpenditureCr: true },
-          orderBy: { asOfDate: "asc" },
-        })
-      : Promise.resolve([]),
-    loadDashboardMeetingRowForCommandCentre(options?.meetingId),
-  ]);
+  const [{ entries, financialYearLabel }, overdueItems, trendRows, lastMeetingRow, latestSnapshot, overdueCount] =
+    await Promise.all([
+      getFinancialBudgetEntriesOverview(actor),
+      prisma.actionItem.findMany({
+        where: { status: "OVERDUE" },
+        orderBy: { dueDate: "asc" },
+        take: 5,
+        include: {
+          assignedTo: { select: { name: true } },
+        },
+      }),
+      fyRow
+        ? prisma.financeExpenditureSnapshot.groupBy({
+            by: ["asOfDate"],
+            where: { financialYearId: fyRow.id },
+            _sum: { ifmsExpenditureCr: true },
+            orderBy: { asOfDate: "asc" },
+          })
+        : Promise.resolve([]),
+      loadDashboardMeetingRowForCommandCentre(options?.meetingId),
+      fyRow
+        ? prisma.financeExpenditureSnapshot.findFirst({
+            where: { financialYearId: fyRow.id },
+            orderBy: { asOfDate: "desc" },
+            select: { asOfDate: true },
+          })
+        : Promise.resolve(null),
+      prisma.actionItem.count({ where: { status: "OVERDUE" } }),
+    ]);
 
   const fy = fyRow;
 
-  let lastSnapshotDate: string | null = null;
-  if (fy) {
-    const latest = await prisma.financeExpenditureSnapshot.findFirst({
-      where: { financialYearId: fy.id },
-      orderBy: { asOfDate: "desc" },
-      select: { asOfDate: true },
-    });
-    lastSnapshotDate = latest?.asOfDate.toISOString().slice(0, 10) ?? null;
-  }
+  const lastSnapshotDate: string | null =
+    latestSnapshot?.asOfDate.toISOString().slice(0, 10) ?? null;
 
   const totalBudgetCr = entries.reduce((s, e) => s + (e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0)), 0);
   const totalSoCr = entries.reduce((s, e) => s + e.so, 0);
@@ -220,8 +222,6 @@ export async function getCommandCentreDashboard(
       ifmsCr: toNumber(row._sum.ifmsExpenditureCr),
     }),
   );
-
-  const overdueCount = await prisma.actionItem.count({ where: { status: "OVERDUE" } });
 
   const overdueActionsPreview: CommandCentreOverduePreview[] = overdueItems.map((item) => ({
     id: item.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
+import { revalidateFinancialCaches } from "@/lib/cached-financial-metadata";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 import { syncSchemeFyCategoryLines } from "@/lib/sync-scheme-fy-category-lines";
@@ -103,6 +104,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     await syncSchemeFyCategoryLines(fy.id, actor?.id ?? null);
+    revalidateFinancialCaches();
 
     return NextResponse.json({ ok: true });
   } catch (error) {

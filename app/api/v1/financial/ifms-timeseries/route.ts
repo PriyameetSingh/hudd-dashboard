@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { asOfDateToYmd, getCachedIfmsTimeseriesGroupBy } from "@/lib/cached-financial-metadata";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/financial-budget-entries";
 import { requireAnyPermission, toAuthErrorResponse } from "@/lib/server-rbac";
@@ -23,15 +24,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ financialYearLabel: null, points: [] });
     }
 
-    const rows = await prisma.financeExpenditureSnapshot.groupBy({
-      by: ["asOfDate"],
-      where: { financialYearId: fy.id },
-      _sum: { ifmsExpenditureCr: true },
-      orderBy: { asOfDate: "asc" },
-    });
+    const rows = await getCachedIfmsTimeseriesGroupBy(fy.id);
 
     const points = rows.map((r) => ({
-      asOfDate: r.asOfDate.toISOString().slice(0, 10),
+      asOfDate: asOfDateToYmd(r.asOfDate),
       ifmsCr: toNumber(r._sum.ifmsExpenditureCr),
     }));
 

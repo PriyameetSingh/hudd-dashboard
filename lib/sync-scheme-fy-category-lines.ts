@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type FinanceYearBudgetAllocation, type FinanceYearBudgetCategoryLine } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   FINANCE_YEAR_BUDGET_CATEGORY_ORDER,
@@ -11,11 +11,19 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+export type FyAllocationWithLines = FinanceYearBudgetAllocation & {
+  categoryLines: FinanceYearBudgetCategoryLine[];
+};
+
 /**
- * Recomputes the three scheme-sponsorship FY lines from scheme budgets, supplements, and latest expenditure snapshots,
- * updates their DB rows, and sets allocation.totalBudgetCr to the sum of all category budget estimates.
+ * Recomputes scheme-sponsorship FY lines from budgets, supplements, and snapshots; updates category lines and
+ * `allocation.totalBudgetCr`. Returns the allocation with fresh `categoryLines` so callers need not call
+ * `ensureFyBudgetAllocationWithLines` again.
  */
-export async function syncSchemeFyCategoryLines(financialYearId: string, createdById: string | null): Promise<void> {
+export async function syncSchemeFyCategoryLines(
+  financialYearId: string,
+  createdById: string | null,
+): Promise<FyAllocationWithLines> {
   const allocation = await ensureFyBudgetAllocationWithLines(financialYearId, createdById);
 
   const [schemes, budgets, snapshots, supplements] = await Promise.all([
@@ -70,19 +78,21 @@ export async function syncSchemeFyCategoryLines(financialYearId: string, created
   }
 
   await prisma.$transaction(async (tx) => {
-    for (const category of FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES) {
-      const b = buckets[category];
-      await tx.financeYearBudgetCategoryLine.update({
-        where: {
-          allocationId_category: { allocationId: allocation.id, category },
-        },
-        data: {
-          budgetEstimateCr: new Prisma.Decimal(roundMoney(b.budgetEstimateCr).toFixed(2)),
-          soExpenditureCr: new Prisma.Decimal(roundMoney(b.soExpenditureCr).toFixed(2)),
-          ifmsExpenditureCr: new Prisma.Decimal(roundMoney(b.ifmsExpenditureCr).toFixed(2)),
-        },
-      });
-    }
+    await Promise.all(
+      FINANCE_YEAR_SCHEME_BUDGET_CATEGORIES.map((category) => {
+        const b = buckets[category];
+        return tx.financeYearBudgetCategoryLine.update({
+          where: {
+            allocationId_category: { allocationId: allocation.id, category },
+          },
+          data: {
+            budgetEstimateCr: new Prisma.Decimal(roundMoney(b.budgetEstimateCr).toFixed(2)),
+            soExpenditureCr: new Prisma.Decimal(roundMoney(b.soExpenditureCr).toFixed(2)),
+            ifmsExpenditureCr: new Prisma.Decimal(roundMoney(b.ifmsExpenditureCr).toFixed(2)),
+          },
+        });
+      }),
+    );
 
     const lines = await tx.financeYearBudgetCategoryLine.findMany({
       where: { allocationId: allocation.id },
@@ -98,5 +108,10 @@ export async function syncSchemeFyCategoryLines(financialYearId: string, created
         createdById,
       },
     });
+  });
+
+  return prisma.financeYearBudgetAllocation.findUniqueOrThrow({
+    where: { id: allocation.id },
+    include: { categoryLines: true },
   });
 }

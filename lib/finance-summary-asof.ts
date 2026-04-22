@@ -30,7 +30,12 @@ export async function aggregateSnapshotTotalsBySchemeBucket(
 > {
   const snaps = await prisma.financeExpenditureSnapshot.findMany({
     where: { financialYearId, asOfDate },
-    include: { scheme: true },
+    select: {
+      schemeId: true,
+      soExpenditureCr: true,
+      ifmsExpenditureCr: true,
+      scheme: { select: { sponsorshipType: true } },
+    },
   });
 
   const byScheme = new Map<string, { so: number; ifms: number }>();
