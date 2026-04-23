@@ -456,12 +456,19 @@ export default function ActionItemsPage() {
 
         {pageTab === "tracker" && !loading && trackerFiltered.length > 0 && (
           <div className="space-y-5">
-            {trackerFiltered.map((item) => {
+            {trackerFiltered.map((item, index) => {
+              const cardToneClasses =
+                index % 2 === 0
+                  ? "border-[var(--border)] bg-[var(--bg-card)]"
+                  : "border-[var(--border)] bg-[var(--bg-alternate-card)]";
               const sorted = [...(item.updates ?? [])].sort(
                 (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
               );
               return (
-                <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
+                <div
+                  key={item.id}
+                  className={`rounded-2xl border p-5 transition hover:border-[var(--border-strong)] ${cardToneClasses}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
                     <div>
                       <h3 className="text-lg font-semibold text-[var(--text-primary)]">{item.title}</h3>

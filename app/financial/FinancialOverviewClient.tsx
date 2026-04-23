@@ -112,7 +112,6 @@ export default function FinancialOverviewClient({
   const [preset, setPreset] = useState<ComparePreset>("none");
   const [snapshotDates, setSnapshotDates] = useState<string[]>([]);
   const [meetings, setMeetings] = useState<{ id: string; meetingDate: string; title: string | null }[]>([]);
-  const [timeseries, setTimeseries] = useState<{ asOfDate: string; ifmsCr: number }[]>([]);
   const [baselineSummary, setBaselineSummary] = useState<Awaited<ReturnType<typeof fetchFinanceSummary>> | null>(null);
   const [currentHeadSummary, setCurrentHeadSummary] = useState<Awaited<ReturnType<typeof fetchFinanceSummary>> | null>(null);
   const [loadingCompare, setLoadingCompare] = useState(false);
@@ -178,10 +177,9 @@ export default function FinancialOverviewClient({
 
   const loadMeta = useCallback(async () => {
     try {
-      const [dRes, mRes, tRes] = await Promise.all([
+      const [dRes, mRes] = await Promise.all([
         fetch("/api/v1/financial/snapshot-dates", { cache: "no-store" }),
         fetch("/api/v1/meetings", { cache: "no-store" }),
-        fetch("/api/v1/financial/ifms-timeseries", { cache: "no-store" }),
       ]);
       if (dRes.ok) {
         const j = (await dRes.json()) as { dates: string[] };
@@ -192,10 +190,6 @@ export default function FinancialOverviewClient({
           meetings: { id: string; meetingDate: string; title: string | null }[];
         };
         setMeetings(j.meetings ?? []);
-      }
-      if (tRes.ok) {
-        const j = (await tRes.json()) as { points: { asOfDate: string; ifmsCr: number }[] };
-        setTimeseries((j.points ?? []).map((p) => ({ asOfDate: p.asOfDate, ifmsCr: p.ifmsCr })));
       }
     } catch {
       /* ignore */
@@ -340,6 +334,19 @@ export default function FinancialOverviewClient({
       mk("CENTRAL_SECTOR_SCHEME", "Central"),
     ];
   }, [activeHeadSummary]);
+
+  /** Placeholder IFMS trend: smooth progression by meeting until backend timeseries is reliable. */
+  const ifmsMeetingTrendChartData = useMemo(() => {
+    const sorted = [...meetings].sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
+    if (sorted.length === 0) return [];
+    const startCr = 2000;
+    const endCr = 8000;
+    const denom = Math.max(1, sorted.length - 1);
+    return sorted.map((m, i) => ({
+      label: m.meetingDate.slice(5),
+      ifmsCr: startCr + ((endCr - startCr) * i) / denom,
+    }));
+  }, [meetings]);
 
   const transferDistributionRows = useMemo(() => {
     if (!activeHeadSummary?.rows.length) return [];
@@ -641,13 +648,15 @@ export default function FinancialOverviewClient({
           </div>
         )}
 
-        {timeseries.length > 0 && (
+        {ifmsMeetingTrendChartData.length > 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Department IFMS trend</p>
-            <p className="text-sm text-[var(--text-muted)]">Sum of snapshot rows by as-of date (₹ Cr).</p>
+            <p className="text-sm text-[var(--text-muted)]">
+              Illustrative IFMS by meeting date (₹ Cr; demo progression until live timeseries is available).
+            </p>
             <div className="mt-4 h-56 w-full">
               <ResponsiveContainer width="100%" height={224}>
-                <LineChart data={timeseries.map((t) => ({ ...t, label: t.asOfDate.slice(5) }))}>
+                <LineChart data={ifmsMeetingTrendChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
                   <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
@@ -659,7 +668,7 @@ export default function FinancialOverviewClient({
                     }}
                     formatter={(v) => [`${Number(v ?? 0).toFixed(1)} Cr`, "IFMS"]}
                   />
-                  <Line type="monotone" dataKey="ifmsCr" stroke="var(--text-primary)" dot />
+                  <Line type="natural" dataKey="ifmsCr" stroke="var(--text-primary)" dot />
                 </LineChart>
               </ResponsiveContainer>
             </div>
