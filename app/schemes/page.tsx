@@ -55,7 +55,8 @@ export default function SchemesPage() {
         setSchemes(overviewRes.schemes);
         setFinancialYearLabel(overviewRes.financialYearLabel);
         setReference(overviewRes.reference);
-        setPermissions(Array.isArray(rbacRes.permissions) ? rbacRes.permissions : []);
+        const rbacPerms = rbacRes?.user?.permissions;
+        setPermissions(Array.isArray(rbacPerms) ? rbacPerms : []);
       } catch (e: unknown) {
         if (!active) return;
         setError(getErrorMessage(e, "Failed to load schemes"));

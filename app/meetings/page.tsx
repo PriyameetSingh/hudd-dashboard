@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import { useRequireRole } from "@/src/lib/route-guards";
-import { getCurrentUser, hasPermission, UserRole, Permission } from "@/lib/auth";
+import { hasPermission, UserRole, Permission, refreshSessionUserFromApi, getCurrentUser } from "@/lib/auth";
 import { fetchMeetings, MeetingListItem } from "@/src/lib/services/meetingService";
 import { CalendarPlus, Play, Sparkles, FileText } from "lucide-react";
 import { getFinancialYear, todayISO } from "./meetingUtils";
@@ -30,11 +30,19 @@ export default function MeetingsPage() {
   const [canSchedule, setCanSchedule] = useState(false);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    setCanSchedule(
-      hasPermission(user, Permission.CREATE_ACTION_ITEMS) ||
-        hasPermission(user, Permission.MANAGE_SCHEMES),
-    );
+    let cancelled = false;
+    void (async () => {
+      await refreshSessionUserFromApi();
+      if (cancelled) return;
+      const user = getCurrentUser();
+      setCanSchedule(
+        hasPermission(user, Permission.CREATE_ACTION_ITEMS) ||
+          hasPermission(user, Permission.MANAGE_SCHEMES),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const load = useCallback(async () => {

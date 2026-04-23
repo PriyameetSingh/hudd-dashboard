@@ -36,6 +36,9 @@ export async function GET() {
           },
         },
         permissionOverrides: { include: { permission: true } },
+        schemeAssignments: {
+          select: { scheme: { select: { code: true } } },
+        },
       },
     });
 
@@ -51,6 +54,8 @@ export async function GET() {
           effect: o.effect as string,
         }));
 
+        const assignedSchemes = [...new Set((u.schemeAssignments as { scheme: { code: string } }[]).map((sa) => sa.scheme.code))];
+
         return {
           code: u.code,
           name: u.name,
@@ -59,6 +64,7 @@ export async function GET() {
           roles: roles.map((r: any) => r.code as string),
           overrides,
           effectivePermissions: computeEffective(roles, overrides),
+          assignedSchemes,
         };
       }),
     });

@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Send, Mic, Bot, User } from "lucide-react";
-import { getCurrentUser, UserRole } from "@/lib/auth";
+import { UserRole } from "@/lib/auth";
+import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import type { AssistantMeetingContext } from "@/lib/assistant-types";
 import { postAssistantQuery } from "@/src/lib/services/assistantService";
 
@@ -34,7 +35,7 @@ export default function ConversationalAI({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const user = getCurrentUser();
+  const user = useHydratedCurrentUser();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

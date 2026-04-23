@@ -1,6 +1,7 @@
 "use client";
 
-import { getCurrentUser, UserRole } from "@/lib/auth";
+import { UserRole } from "@/lib/auth";
+import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useEffect, useState, useCallback, Suspense } from "react";
 import {
@@ -187,7 +188,7 @@ function CommandCentreContent({ setActive }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const meetingId = searchParams.get("meeting");
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+  const user = useHydratedCurrentUser();
   const [pendingSummaries, setPendingSummaries] = useState<PendingApprovalSummary[]>([]);
   const [dashboard, setDashboard] = useState<CommandCentreDashboard | null>(null);
   const [dashError, setDashError] = useState<string | null>(null);
@@ -199,10 +200,6 @@ function CommandCentreContent({ setActive }: Props) {
     verticalName: string;
   } | null>(null);
   const [openingMaterialId, setOpeningMaterialId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setUser(getCurrentUser());
-  }, []);
 
   useEffect(() => {
     let active = true;

@@ -2,14 +2,8 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import {
-  UserRole,
-  getCurrentUser,
-  canAccessMyTasksHub,
-  hasPermission,
-  Permission,
-  type MockUser,
-} from "@/lib/auth";
+import { UserRole, canAccessMyTasksHub, hasPermission, Permission, type MockUser } from "@/lib/auth";
+import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
 import { fetchMeetings, type MeetingListItem } from "@/src/lib/services/meetingService";
@@ -355,54 +349,50 @@ function MeetingScopeSelect() {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+  const user = useHydratedCurrentUser();
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [kpiSubmissions, setKpiSubmissions] = useState<KPISubmission[]>([]);
   const [assigneeDbUserId, setAssigneeDbUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      const u = getCurrentUser();
-      setUser(u);
-      if (!u) {
-        setAssigneeDbUserId(null);
-        setKpiSubmissions([]);
-        return;
+    if (!user) {
+      setAssigneeDbUserId(null);
+      setKpiSubmissions([]);
+      setActionItems([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const data = await fetchActionItems();
+        if (active) setActionItems(data);
+      } catch {
+        if (active) setActionItems([]);
       }
+    })();
+    if (hasPermission(user, Permission.ENTER_KPI_DATA)) {
       void (async () => {
         try {
-          const data = await fetchActionItems();
-          if (active) setActionItems(data);
+          const [dbId, kpiData] = await Promise.all([fetchSessionDbUserId(), fetchKPISubmissions()]);
+          if (active) {
+            setAssigneeDbUserId(dbId);
+            setKpiSubmissions(kpiData.submissions);
+          }
         } catch {
-          if (active) setActionItems([]);
+          if (active) {
+            setAssigneeDbUserId(null);
+            setKpiSubmissions([]);
+          }
         }
       })();
-      if (hasPermission(u, Permission.ENTER_KPI_DATA)) {
-        void (async () => {
-          try {
-            const [dbId, kpiData] = await Promise.all([fetchSessionDbUserId(), fetchKPISubmissions()]);
-            if (active) {
-              setAssigneeDbUserId(dbId);
-              setKpiSubmissions(kpiData.submissions);
-            }
-          } catch {
-            if (active) {
-              setAssigneeDbUserId(null);
-              setKpiSubmissions([]);
-            }
-          }
-        })();
-      } else {
-        setAssigneeDbUserId(null);
-        setKpiSubmissions([]);
-      }
-    });
+    } else {
+      setAssigneeDbUserId(null);
+      setKpiSubmissions([]);
+    }
     return () => {
       active = false;
     };
-  }, []);
+  }, [user]);
 
   const actionItemsBadge = useMemo(() => {
     if (!user) return null;

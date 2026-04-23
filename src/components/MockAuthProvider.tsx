@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, RotateCw, Minimize2 } from "lucide-react";
-import { MOCK_USERS, UserRole, getCurrentUser, setCurrentUser } from "@/lib/auth";
+import { MOCK_USERS, UserRole, getCurrentUser, refreshSessionUserFromApi, setCurrentUser } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -35,17 +35,25 @@ export default function MockAuthProvider() {
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
 
   useEffect(() => {
-    setUser(getCurrentUser());
+    let cancelled = false;
+    void (async () => {
+      await refreshSessionUserFromApi();
+      if (!cancelled) setUser(getCurrentUser());
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!user) {
     return null;
   }
 
-  const handleRoleChange = (role: UserRole) => {
-    const target = MOCK_USERS.find(entry => entry.role === role);
+  const handleRoleChange = async (role: UserRole) => {
+    const target = MOCK_USERS.find((entry) => entry.role === role);
     if (!target) return;
     setCurrentUser(target);
+    await refreshSessionUserFromApi();
     window.location.reload();
   };
 

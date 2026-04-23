@@ -1,24 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { MockUser, Permission, ROLE_PERMISSIONS, UserRole, MOCK_USERS } from "@/lib/auth";
+import { MockUser, Permission, UserRole, MOCK_USERS } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
 import PendingBadge from "@/src/components/ui/PendingBadge";
 
 const PERMISSION_LIST = Object.values(Permission);
 
 export default function AdminPermissionsPage() {
-  const [users, setUsers] = useState<MockUser[]>(() =>
-    MOCK_USERS.map((user) => ({
-      ...user,
-      permissions: user.permissions ?? [...(ROLE_PERMISSIONS[user.role] ?? [])],
-    }))
-  );
+  const [users, setUsers] = useState<MockUser[]>(() => MOCK_USERS.map((user) => ({ ...user, permissions: [] as Permission[] })));
+  const [rolePermissionsByCode, setRolePermissionsByCode] = useState<Record<string, Permission[]>>({});
 
   const [form, setForm] = useState({ name: "", role: UserRole.TASU, email: "", department: "", assignedSchemes: "" });
   const [alert, setAlert] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/rbac/roles");
+        if (!response.ok) return;
+        const data = (await response.json()) as { roles: Array<{ code: string; permissions: Permission[] }> };
+        if (!active) return;
+        const map: Record<string, Permission[]> = {};
+        for (const r of data.roles) {
+          map[r.code] = r.permissions;
+        }
+        setRolePermissionsByCode(map);
+        setUsers((prev) =>
+          prev.map((u) => ({
+            ...u,
+            permissions: map[u.role] ?? u.permissions ?? [],
+          })),
+        );
+      } catch {
+        /* keep empty until MANAGE_PERMISSIONS session can load roles */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const managePermissionCount = useMemo(
     () => users.filter((user) => user.permissions?.includes(Permission.MANAGE_PERMISSIONS)).length,
@@ -60,7 +84,7 @@ export default function AdminPermissionsPage() {
         role: form.role,
         department: form.department || "New unit",
         assignedSchemes: form.assignedSchemes ? form.assignedSchemes.split(",").map((s) => s.trim()) : ["All schemes"],
-        permissions: [...(ROLE_PERMISSIONS[form.role] ?? [])],
+        permissions: [...(rolePermissionsByCode[form.role] ?? [])],
       },
     ]);
     setForm({ name: "", role: UserRole.TASU, email: "", department: "", assignedSchemes: "" });
@@ -164,14 +188,18 @@ export default function AdminPermissionsPage() {
             </div>
           </section>
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Role permissions (client-only)</h2>
-            <p className="text-sm text-[var(--text-muted)]">Toggle which permissions each role would normally receive. Backend sync pending.</p>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Role permissions (from database)</h2>
+            <p className="text-sm text-[var(--text-muted)]">Effective grants per role code as stored in RBAC tables.</p>
             <div className="mt-4 grid gap-3 text-xs text-[var(--text-muted)]">
-              {Object.entries(ROLE_PERMISSIONS).map(([role, perms]) => (
+              {(
+                Object.keys(rolePermissionsByCode).length > 0
+                  ? (Object.entries(rolePermissionsByCode) as [string, Permission[]][])
+                  : (Object.values(UserRole).map((r) => [r, [] as Permission[]] as [UserRole, Permission[]]))
+              ).map(([role, perms]) => (
                 <div key={role} className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
                   <div className="flex items-center justify-between text-[var(--text-primary)]">
-                    <span>{role.replace(/_/g, " ")}</span>
-                    <span className="text-[10px] uppercase tracking-[0.3em]">Dummy</span>
+                    <span>{String(role).replace(/_/g, " ")}</span>
+                    <span className="text-[10px] uppercase tracking-[0.3em]">DB</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {PERMISSION_LIST.map((permission) => (

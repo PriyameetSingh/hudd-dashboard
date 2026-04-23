@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MOCK_USERS, UserRole, setCurrentUser } from "@/lib/auth";
+import { MOCK_USERS, UserRole, refreshSessionUserFromApi, setCurrentUser } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
 
 const ROLE_TITLES: Record<UserRole, string> = {
@@ -20,11 +20,12 @@ export default function LoginGrid() {
   const router = useRouter();
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const handleSelect = (id: string) => {
+  const handleSelect = async (id: string) => {
     const user = MOCK_USERS.find((entry) => entry.id === id);
     if (!user) return;
     setActiveId(id);
     setCurrentUser(user);
+    await refreshSessionUserFromApi();
     router.replace("/dashboard");
   };
 

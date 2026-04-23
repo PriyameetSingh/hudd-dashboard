@@ -29,8 +29,11 @@ export function getCurrentUser(): MockUser | null {
   return parseUser(payload);
 }
 
+export function clearCurrentUser() {
+  deleteCookie(COOKIE_NAME, { path: "/" });
+}
 
-
+/** Prototype login cards — identities must exist in DB with matching `users.code`. Permissions always come from `/api/v1/rbac/me`. */
 export const MOCK_USERS: MockUser[] = [
   {
     id: "acs",
@@ -98,90 +101,65 @@ export const MOCK_USERS: MockUser[] = [
   },
 ];
 
-export function clearCurrentUser() {
-  deleteCookie(COOKIE_NAME, { path: "/" });
-}
-
-export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  [UserRole.ACS]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.ENTER_FINANCIAL_DATA,
-    Permission.ENTER_KPI_DATA,
-    Permission.CREATE_ACTION_ITEMS,
-    Permission.UPDATE_ACTION_ITEMS,
-    Permission.APPROVE_FINANCIAL,
-    Permission.APPROVE_KPI,
-    Permission.APPROVE_ACTION_ITEMS,
-    Permission.MANAGE_USERS,
-    Permission.MANAGE_SCHEMES,
-    Permission.EXPORT_REPORTS,
-    Permission.VIEW_COMMAND_CENTRE,
-    Permission.VIEW_ANALYTICS,
-    Permission.UPLOAD_PROOF,
-  ],
-  [UserRole.PS_HUDD]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.ENTER_FINANCIAL_DATA,
-    Permission.CREATE_ACTION_ITEMS,
-    Permission.UPDATE_ACTION_ITEMS,
-    Permission.APPROVE_FINANCIAL,
-    Permission.APPROVE_KPI,
-    Permission.APPROVE_ACTION_ITEMS,
-    Permission.MANAGE_USERS,
-    Permission.MANAGE_SCHEMES,
-    Permission.EXPORT_REPORTS,
-    Permission.VIEW_COMMAND_CENTRE,
-    Permission.VIEW_ANALYTICS,
-  ],
-  [UserRole.AS]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.ENTER_FINANCIAL_DATA,
-    Permission.APPROVE_FINANCIAL,
-    Permission.APPROVE_ACTION_ITEMS,
-    Permission.MANAGE_SCHEMES,
-    Permission.EXPORT_REPORTS,
-    Permission.VIEW_ANALYTICS,
-  ],
-  [UserRole.FA]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.ENTER_FINANCIAL_DATA,
-    Permission.APPROVE_FINANCIAL,
-    Permission.UPLOAD_PROOF,
-  ],
-  [UserRole.TASU]: [
-    Permission.VIEW_ASSIGNED_DATA,
-    Permission.CREATE_ACTION_ITEMS,
-    Permission.UPDATE_ACTION_ITEMS,
-    Permission.VIEW_ANALYTICS,
-    Permission.MANAGE_PERMISSIONS,
-  ],
-  [UserRole.NODAL_OFFICER]: [
-    Permission.VIEW_ASSIGNED_DATA,
-    Permission.ENTER_KPI_DATA,
-    Permission.UPLOAD_PROOF,
-    Permission.VIEW_ANALYTICS,
-  ],
-  [UserRole.DIRECTOR]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.VIEW_ANALYTICS,
-    Permission.EXPORT_REPORTS,
-  ],
-  [UserRole.VIEWER]: [
-    Permission.VIEW_ALL_DATA,
-    Permission.VIEW_COMMAND_CENTRE,
-    Permission.VIEW_ANALYTICS,
-  ],
+type MeApiUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  department: string;
+  assignedSchemes: string[];
+  permissions: Permission[];
 };
 
+/**
+ * Loads the signed-in user profile and effective permissions from the database (via `/api/v1/rbac/me`)
+ * and refreshes the session cookie. Call after login or when opening a guarded page.
+ */
+export async function refreshSessionUserFromApi(): Promise<MockUser | null> {
+  try {
+    const res = await fetch("/api/v1/rbac/me", { credentials: "include" });
+    if (!res.ok) return getCurrentUser();
+    const data = (await res.json()) as { user: MeApiUser | null };
+    if (!data.user) {
+      return null;
+    }
+    const next: MockUser = {
+      id: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
+      role: data.user.role,
+      department: data.user.department,
+      assignedSchemes: data.user.assignedSchemes,
+      permissions: data.user.permissions,
+    };
+    setCurrentUser(next);
+    return next;
+  } catch {
+    return getCurrentUser();
+  }
+}
+
 export function hasPermission(user: MockUser | null, permission: Permission) {
+  if (!user?.permissions?.length) return false;
+  return user.permissions.includes(permission);
+}
+
+export const MY_TASKS_HUB_ACCESS_PERMISSIONS: Permission[] = [
+  Permission.ENTER_FINANCIAL_DATA,
+  Permission.ENTER_KPI_DATA,
+  Permission.UPDATE_ACTION_ITEMS,
+  Permission.CREATE_ACTION_ITEMS,
+];
+
+export function canAccessMyTasksHub(user: MockUser | null): boolean {
   if (!user) return false;
-  return ROLE_PERMISSIONS[user.role]?.includes(permission) ?? false;
+  return MY_TASKS_HUB_ACCESS_PERMISSIONS.some((p) => hasPermission(user, p));
 }
 
 export function canAccessScheme(user: MockUser | null, schemeCode: string) {
   if (!user) return false;
   if (roleHasViewAll(user)) return true;
-  return user.assignedSchemes.some(s => s.toLowerCase() === schemeCode.toLowerCase());
+  return user.assignedSchemes.some((s) => s.toLowerCase() === schemeCode.toLowerCase());
 }
 
 function roleHasViewAll(user: MockUser) {

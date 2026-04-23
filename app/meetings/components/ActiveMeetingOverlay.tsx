@@ -15,7 +15,8 @@ import {
   CirclePlus,
   Bot,
 } from "lucide-react";
-import { getCurrentUser, hasPermission, Permission } from "@/lib/auth";
+import { hasPermission, Permission } from "@/lib/auth";
+import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import { addMeetingTopic, type MeetingListItem } from "@/src/lib/services/meetingService";
 import { getFinancialYear } from "../meetingUtils";
 import PresentationsPanel from "./PresentationsPanel";
@@ -191,7 +192,8 @@ export default function ActiveMeetingOverlay({
   const [addingTopic, setAddingTopic] = useState(false);
   const [topicAddError, setTopicAddError] = useState<string | null>(null);
 
-  const canCreateActionItem = hasPermission(getCurrentUser(), Permission.CREATE_ACTION_ITEMS);
+  const sessionUser = useHydratedCurrentUser();
+  const canCreateActionItem = hasPermission(sessionUser, Permission.CREATE_ACTION_ITEMS);
 
   const toggleDiscussed = (id: string) => {
     setDiscussedIds((prev) => {

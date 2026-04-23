@@ -3,7 +3,7 @@
 import AppShell from "@/components/AppShell";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRequireRole } from "@/src/lib/route-guards";
-import { MockUser, Permission, ROLE_PERMISSIONS, UserRole, MOCK_USERS } from "@/lib/auth";
+import { Permission, UserRole } from "@/lib/auth";
 import RoleBadge from "@/src/components/ui/RoleBadge";
 
 const PERMISSION_LIST = Object.values(Permission);
@@ -23,6 +23,7 @@ type DbUserRow = {
   roles: UserRole[];
   overrides: DbUserPermissionOverride[];
   effectivePermissions: Permission[];
+  assignedSchemes: string[];
 };
 
 // ─── Permissions Modal ────────────────────────────────────────────────────────
@@ -147,10 +148,9 @@ export default function AdminUsersPage() {
   const [alert, setAlert] = useState("");
   const [selectedUser, setSelectedUser] = useState<DbUserRow | null>(null);
 
-  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, Permission[]>>(() => {
-    const entries = Object.values(UserRole).map((role) => [role, [...(ROLE_PERMISSIONS[role] ?? [])]]);
-    return Object.fromEntries(entries) as Record<UserRole, Permission[]>;
-  });
+  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, Permission[]>>(() =>
+    Object.fromEntries(Object.values(UserRole).map((role) => [role, [] as Permission[]])) as Record<UserRole, Permission[]>,
+  );
 
   const refreshRoles = useCallback(async () => {
     const response = await fetch("/api/v1/rbac/roles");
@@ -194,12 +194,6 @@ export default function AdminUsersPage() {
   const managePermissionCount = useMemo(() => {
     return users.filter((user) => user.effectivePermissions.includes(Permission.MANAGE_PERMISSIONS)).length;
   }, [users]);
-
-  const mockUserByCode = useMemo(() => {
-    const map = new Map<string, MockUser>();
-    for (const user of MOCK_USERS) map.set(user.id, user);
-    return map;
-  }, []);
 
   const togglePermission = useCallback(async (userCode: string, permission: Permission) => {
     const target = users.find((user) => user.code === userCode);
@@ -262,7 +256,7 @@ export default function AdminUsersPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Active Users</p>
-            <p className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">{MOCK_USERS.length}</p>
+            <p className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">{users.length}</p>
           </div>
         </div>
 
@@ -293,7 +287,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{user.department ?? ""}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">
-                      {mockUserByCode.get(user.code ?? "")?.assignedSchemes?.join(", ") ?? ""}
+                      {user.assignedSchemes?.length ? user.assignedSchemes.join(", ") : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <button

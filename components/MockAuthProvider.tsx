@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldCheck, RotateCw, Minimize2 } from "lucide-react";
-import { MOCK_USERS, UserRole, getCurrentUser, setCurrentUser } from "@/lib/auth";
+import { MOCK_USERS, UserRole, getCurrentUser, refreshSessionUserFromApi, setCurrentUser } from "@/lib/auth";
 
 const ROLE_COLORS: Record<UserRole, string> = {
   [UserRole.ACS]: "#1f3a93",
@@ -23,17 +23,26 @@ export default function MockAuthProvider() {
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
 
   useEffect(() => {
-    setUser(getCurrentUser());
+    let cancelled = false;
+    (async () => {
+      await refreshSessionUserFromApi();
+      if (cancelled) return;
+      setUser(getCurrentUser());
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!user) {
     return null;
   }
 
-  const handleRoleChange = (role: UserRole) => {
-    const target = MOCK_USERS.find(entry => entry.role === role);
+  const handleRoleChange = async (role: UserRole) => {
+    const target = MOCK_USERS.find((entry) => entry.role === role);
     if (!target) return;
     setCurrentUser(target);
+    await refreshSessionUserFromApi();
     window.location.reload();
   };
 

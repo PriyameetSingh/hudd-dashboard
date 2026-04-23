@@ -1,11 +1,12 @@
 "use client";
 
 import { Bell, User, Bot } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "@/components/ThemeProvider";
 import TextSizeToolbarControl from "@/components/TextSizeToolbarControl";
-import { getCurrentUser, UserRole } from "@/lib/auth";
+import { UserRole } from "@/lib/auth";
+import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import ConversationalAI from "@/components/ConversationalAI";
 
 interface Props {
@@ -15,12 +16,8 @@ interface Props {
 
 export default function AppShell({ children, title }: Props) {
   const { mounted } = useTheme();
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+  const user = useHydratedCurrentUser();
   const [chatOpen, setChatOpen] = useState(false);
-
-  useEffect(() => {
-    setUser(getCurrentUser());
-  }, []);
 
   const topLabel = useMemo(() => {
     if (!user) return "HUDD";
