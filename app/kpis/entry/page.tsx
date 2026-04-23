@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { useRequireRole } from "@/src/lib/route-guards";
-import { UserRole } from "@/lib/auth";
+import { useRequireAnyPermission } from "@/src/lib/route-guards";
+import { Permission } from "@/lib/auth";
 import { fetchKPISubmissions, submitKPIMeasurement } from "@/src/lib/services/kpiService";
 import { KPISubmission } from "@/types";
 import StatusBadge from "@/src/components/ui/StatusBadge";
@@ -30,7 +30,7 @@ interface RowState {
 }
 
 export default function KPIEntryPage() {
-  useRequireRole([UserRole.NODAL_OFFICER], "/dashboard");
+  useRequireAnyPermission([Permission.ENTER_KPI_DATA], "/dashboard");
 
   const [submissions, setSubmissions] = useState<KPISubmission[]>([]);
   const [financialYearLabel, setFinancialYearLabel] = useState<string | null>(null);

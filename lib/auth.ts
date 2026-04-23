@@ -180,6 +180,19 @@ export function hasPermission(user: MockUser | null, permission: Permission) {
   return ROLE_PERMISSIONS[user.role]?.includes(permission) ?? false;
 }
 
+/** Any of these grants the combined "My tasks" hub in the sidebar and /my-tasks. */
+export const MY_TASKS_HUB_ACCESS_PERMISSIONS: Permission[] = [
+  Permission.ENTER_FINANCIAL_DATA,
+  Permission.ENTER_KPI_DATA,
+  Permission.UPDATE_ACTION_ITEMS,
+  Permission.CREATE_ACTION_ITEMS,
+];
+
+export function canAccessMyTasksHub(user: MockUser | null): boolean {
+  if (!user) return false;
+  return MY_TASKS_HUB_ACCESS_PERMISSIONS.some((p) => hasPermission(user, p));
+}
+
 export function canAccessScheme(user: MockUser | null, schemeCode: string) {
   if (!user) return false;
   if (roleHasViewAll(user)) return true;

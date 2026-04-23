@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, createElement } from "react";
 import type { ComponentProps, ComponentType } from "react";
-import { getCurrentUser, MockUser, UserRole } from "@/lib/auth";
+import { getCurrentUser, hasPermission, MockUser, Permission, UserRole } from "@/lib/auth";
 
 export function useRequireAuth(redirectTo = "/login") {
   const router = useRouter();
@@ -37,6 +37,28 @@ export function useRequireRole(roles: UserRole[] = [], redirectTo = "/dashboard"
       router.replace(redirectTo);
     }
   }, [rolesKey, redirectTo, router]);
+
+  return useMemo(() => user, [user]);
+}
+
+export function useRequireAnyPermission(permissions: Permission[], redirectTo = "/dashboard") {
+  const router = useRouter();
+  const [user, setUser] = useState<MockUser | null>(null);
+  const permKey = permissions.join(",");
+
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    if (!currentUser) {
+      router.replace("/login");
+      return;
+    }
+    const list = permKey ? (permKey.split(",") as Permission[]) : [];
+    const allowed = list.some((p) => hasPermission(currentUser, p));
+    if (!allowed) {
+      router.replace(redirectTo);
+    }
+  }, [permKey, redirectTo, router]);
 
   return useMemo(() => user, [user]);
 }

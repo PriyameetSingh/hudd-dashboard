@@ -2,12 +2,31 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { UserRole, getCurrentUser, type MockUser } from "@/lib/auth";
+import {
+  UserRole,
+  getCurrentUser,
+  canAccessMyTasksHub,
+  hasPermission,
+  Permission,
+  type MockUser,
+} from "@/lib/auth";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
 import { fetchMeetings, type MeetingListItem } from "@/src/lib/services/meetingService";
 import type { ActionItem, KPISubmission } from "@/types";
-import { LayoutDashboard, LayoutGrid, IndianRupee, ListChecks, Activity, UserCog, ShieldCheck, ClipboardList, FileText, CalendarDays, Layers, Gauge } from "lucide-react";
+import {
+  LayoutDashboard,
+  LayoutGrid,
+  IndianRupee,
+  ListChecks,
+  Activity,
+  UserCog,
+  ClipboardList,
+  CalendarDays,
+  Layers,
+  Gauge,
+  CheckSquare,
+} from "lucide-react";
 
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -88,7 +107,23 @@ type NavItem = {
   badge?: string;
   emphasis?: boolean;
   children?: NavItem[];
+  /** When true, item is shown only if `canAccessMyTasksHub(user)` (financial / KPI / action-item work). */
+  myTasksHubGate?: boolean;
 };
+
+function mergePendingBadges(
+  slices: { count: number; tone: "red" | "yellow" | "green" | null }[],
+): { count: number; tone: "red" | "yellow" | "green" | null } {
+  const active = slices.filter((s) => s.count > 0 && s.tone);
+  if (!active.length) return { count: 0, tone: null };
+  const count = active.reduce((acc, s) => acc + s.count, 0);
+  const tone = active.some((s) => s.tone === "red")
+    ? "red"
+    : active.some((s) => s.tone === "yellow")
+      ? "yellow"
+      : "green";
+  return { count, tone };
+}
 
 const items: NavItem[] = [
   {
@@ -98,18 +133,18 @@ const items: NavItem[] = [
     roles: Object.values(UserRole),
   },
   {
+    label: "My Tasks",
+    href: "/my-tasks",
+    icon: CheckSquare,
+    roles: Object.values(UserRole),
+    myTasksHubGate: true,
+  },
+  {
     label: "Financial Progress",
     href: "/financial",
     icon: IndianRupee,
     roles: Object.values(UserRole),
     children: [
-      {
-        label: "My Tasks",
-        href: "/financial/entry/scheme",
-        icon: IndianRupee,
-        roles: [UserRole.FA],
-        emphasis: true,
-      },
       {
         label: "Summary",
         href: "/financial/entry/summary",
@@ -151,17 +186,8 @@ const items: NavItem[] = [
     href: "/kpis",
     icon: ClipboardList,
     roles: Object.values(UserRole),
-    children: [
-      {
-        label: "My Tasks",
-        href: "/kpis/entry",
-        icon: ShieldCheck,
-        roles: [UserRole.NODAL_OFFICER],
-        emphasis: true,
-      },
-    ],
   },
-  
+
   {
     label: "Meetings",
     href: "/meetings",
@@ -184,13 +210,13 @@ const items: NavItem[] = [
     label: "Administration",
     href: "/admin",
     icon: UserCog,
-    roles: [UserRole.ACS, UserRole.PS_HUDD, UserRole.AS],
+    roles: [UserRole.PS_HUDD, UserRole.AS, UserRole.TASU],
     children: [
       {
         label: "Users",
         href: "/admin/users",
         icon: UserCog,
-        roles: [UserRole.ACS, UserRole.PS_HUDD],
+        roles: [UserRole.PS_HUDD, UserRole.TASU],
       },
     ],
   },
@@ -353,7 +379,7 @@ export default function Sidebar() {
           if (active) setActionItems([]);
         }
       })();
-      if (u.role === UserRole.NODAL_OFFICER) {
+      if (hasPermission(u, Permission.ENTER_KPI_DATA)) {
         void (async () => {
           try {
             const [dbId, kpiData] = await Promise.all([fetchSessionDbUserId(), fetchKPISubmissions()]);
@@ -385,6 +411,18 @@ export default function Sidebar() {
 
   const kpiEntryBadge = useMemo(() => pendingKpiEntryBadgeState(kpiSubmissions, assigneeDbUserId), [kpiSubmissions, assigneeDbUserId]);
 
+  const myTasksHubBadge = useMemo((): { count: number; tone: "red" | "yellow" | "green" | null } => {
+    if (!user || !canAccessMyTasksHub(user)) return { count: 0, tone: null };
+    const slices: { count: number; tone: "red" | "yellow" | "green" | null }[] = [];
+    if (hasPermission(user, Permission.UPDATE_ACTION_ITEMS) || hasPermission(user, Permission.CREATE_ACTION_ITEMS)) {
+      slices.push(actionItemsBadge ?? { count: 0, tone: null });
+    }
+    if (hasPermission(user, Permission.ENTER_KPI_DATA)) {
+      slices.push(kpiEntryBadge);
+    }
+    return mergePendingBadges(slices);
+  }, [user, actionItemsBadge, kpiEntryBadge]);
+
   const roleBadge = useMemo(() => {
     if (!user) return null;
     return (
@@ -394,7 +432,12 @@ export default function Sidebar() {
     );
   }, [user]);
 
-  const visibleItems = user ? items.filter(item => item.roles.includes(user.role)) : [];
+  const visibleItems = user
+    ? items.filter(
+        (item) =>
+          item.roles.includes(user.role) && (!item.myTasksHubGate || canAccessMyTasksHub(user)),
+      )
+    : [];
 
   return (
     <aside className="w-64 h-full bg-(--bg-surface) border-r border-(--sidebar-border) flex flex-col sticky top-0">
@@ -438,6 +481,14 @@ export default function Sidebar() {
                       ({actionItemsBadge.count})
                     </span>
                   )}
+                  {item.href === "/my-tasks" && myTasksHubBadge.count > 0 && myTasksHubBadge.tone && (
+                    <span
+                      className={`shrink-0 tabular-nums text-[13px] font-semibold ${BADGE_TONE_CLASS[myTasksHubBadge.tone]}`}
+                      title="Pending items across KPI and decision-tracker work assigned to you"
+                    >
+                      ({myTasksHubBadge.count})
+                    </span>
+                  )}
                 </span>
                 {item.badge && <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white bg-[var(--sidebar-active-bg)] px-2 py-0.5 rounded-full ml-auto shrink-0 opacity-80">{item.badge}</span>}
               </Link>
@@ -466,14 +517,6 @@ export default function Sidebar() {
                           </span>
                           <span className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="truncate">{child.label}</span>
-                            {child.href === "/kpis/entry" && kpiEntryBadge.count > 0 && kpiEntryBadge.tone && (
-                              <span
-                                className={`shrink-0 tabular-nums text-[13px] font-semibold ${BADGE_TONE_CLASS[kpiEntryBadge.tone]}`}
-                                title="KPI entries pending for you (action owner)"
-                              >
-                                ({kpiEntryBadge.count})
-                              </span>
-                            )}
                           </span>
                         </Link>
                       </li>
