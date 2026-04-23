@@ -3,76 +3,449 @@
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { UserRole } from "@/lib/auth";
-import { Gauge, Lightbulb } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Gauge, Lightbulb, Star, TriangleAlert } from "lucide-react";
+import {
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type SchemeFilter =
   | "all"
-  | "SUJALA"
-  | "MSBY"
   | "PMAY-U"
-  | "AMRUT 2.0"
+  | "MSBY"
+  | "SUJALA"
   | "SBM"
   | "Urban Mobility"
-  | "Sewerage & Drainage";
+  | "Storm Water Drainage"
+  | "AMRUT 2.0"
+  | "Sanitation"
+  | "Samruddha Sahara";
 
-type SchemeRow = {
+type EfficiencyTier = "efficient" | "balanced" | "inefficient" | "na";
+
+type ExecutionRow = {
   key: string;
-  shortName: string;
-  fullName: string;
-  scoreLabel: string;
-  physicalPct: number;
+  /** Bold primary label in table */
+  scheme: string;
+  /** Subtitle / programme */
+  programme: string;
+  expenditureCr: number | null;
   financialPct: number;
-  efficiencyLabel: string;
+  physicalPct: number;
+  /** Which filter pill includes this row */
+  filterTags: SchemeFilter[];
+};
+
+type CostCard = {
+  key: string;
+  label: string;
+  valueDisplay: string;
+  unit: string;
+  footer: string;
+  tier: "good" | "mid" | "bad";
+};
+
+type RiskInsight = {
+  id: string;
+  tier: "risk" | "good" | "watch";
+  text: string;
 };
 
 const SCHEME_FILTERS: { id: SchemeFilter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "SUJALA", label: "SUJALA" },
-  { id: "MSBY", label: "MSBY" },
   { id: "PMAY-U", label: "PMAY-U" },
-  { id: "AMRUT 2.0", label: "AMRUT 2.0" },
+  { id: "MSBY", label: "MSBY" },
+  { id: "SUJALA", label: "SUJALA" },
   { id: "SBM", label: "SBM" },
   { id: "Urban Mobility", label: "Urban Mobility" },
-  { id: "Sewerage & Drainage", label: "Sewerage & Drainage" },
+  { id: "Storm Water Drainage", label: "Storm Water Drainage" },
+  { id: "AMRUT 2.0", label: "AMRUT 2.0" },
+  { id: "Sanitation", label: "Sanitation" },
+  { id: "Samruddha Sahara", label: "Samruddha Sahara" },
 ];
 
-const SCHEME_ROWS: SchemeRow[] = [
-  { key: "sujala", shortName: "SUJALA", fullName: "SUJALA", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "msby", shortName: "MSBY", fullName: "MSBY", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "pmay", shortName: "PMAY", fullName: "PMAY-U", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "amrut", shortName: "AMRUT 2.0", fullName: "AMRUT 2.0", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "sbm", shortName: "SBM", fullName: "SBM", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "urban-mobility", shortName: "Urban Mobility", fullName: "Urban Mobility", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
-  { key: "sewerage", shortName: "Sewerage", fullName: "Sewerage & Drainage", scoreLabel: "–", physicalPct: 0, financialPct: 0, efficiencyLabel: "N/A" },
+/** Static figures aligned with dashboard screenshots */
+const EXECUTION_ROWS: ExecutionRow[] = [
+  {
+    key: "sbm",
+    scheme: "SBM",
+    programme: "SBM",
+    expenditureCr: 85.19,
+    financialPct: 23.81,
+    physicalPct: 31,
+    filterTags: ["SBM"],
+  },
+  {
+    key: "sujala",
+    scheme: "SUJALA",
+    programme: "SUJALA",
+    expenditureCr: 805.455,
+    financialPct: 99.69,
+    physicalPct: 98.52,
+    filterTags: ["SUJALA"],
+  },
+  {
+    key: "fstp",
+    scheme: "FSTP",
+    programme: "Sanitation",
+    expenditureCr: 99.99,
+    financialPct: 99.99,
+    physicalPct: 99,
+    filterTags: ["Sanitation"],
+  },
+  {
+    key: "swm",
+    scheme: "SWM",
+    programme: "Sanitation",
+    expenditureCr: 211,
+    financialPct: 100,
+    physicalPct: 99,
+    filterTags: ["Sanitation"],
+  },
+  {
+    key: "storm-drain",
+    scheme: "Storm Drain",
+    programme: "Storm Water Drainage",
+    expenditureCr: 330,
+    financialPct: 100,
+    physicalPct: 80,
+    filterTags: ["Storm Water Drainage"],
+  },
+  {
+    key: "amrut",
+    scheme: "AMRUT 2.0",
+    programme: "AMRUT 2.0",
+    expenditureCr: 844.87,
+    financialPct: 89,
+    physicalPct: 55,
+    filterTags: ["AMRUT 2.0"],
+  },
+  {
+    key: "urban-mobility",
+    scheme: "Urban Mobility",
+    programme: "Urban Mobility",
+    expenditureCr: 331.25,
+    financialPct: 98.88,
+    physicalPct: 43,
+    filterTags: ["Urban Mobility"],
+  },
+  {
+    key: "pmay",
+    scheme: "PMAY-U",
+    programme: "PMAY-U",
+    expenditureCr: 200.68,
+    financialPct: 25.22,
+    physicalPct: 10.14,
+    filterTags: ["PMAY-U"],
+  },
+  {
+    key: "msby",
+    scheme: "MSBY",
+    programme: "MSBY",
+    expenditureCr: 1166.4,
+    financialPct: 97.2,
+    physicalPct: 22,
+    filterTags: ["MSBY"],
+  },
+  {
+    key: "sewerage",
+    scheme: "Sewerage",
+    programme: "Samruddha Sahara",
+    expenditureCr: 300,
+    financialPct: 100,
+    physicalPct: 5,
+    filterTags: ["Samruddha Sahara"],
+  },
+  {
+    key: "garima",
+    scheme: "GARIMA",
+    programme: "Sanitation",
+    expenditureCr: null,
+    financialPct: 0,
+    physicalPct: 97,
+    filterTags: ["Sanitation"],
+  },
+  {
+    key: "led-light",
+    scheme: "LED Light",
+    programme: "Urban Mobility",
+    expenditureCr: null,
+    financialPct: 0,
+    physicalPct: 63,
+    filterTags: ["Urban Mobility"],
+  },
 ];
 
-const RISK_INSIGHTS: string[] = [
-  "FY 2026-27 — early in the fiscal year, no expenditure recorded yet.",
-  "Total departmental budget: ₹10,726.87 Cr. Budget estimates unchanged from 1st meeting.",
-  "Decision tracker shows 65 items carried forward; updated statuses for Metro Note (approved in Cabinet), Waterfront EFC (approved), and PM e-Bus Sewa (complied).",
-  "Key focus: Cabinet proposals, Pothole-Free Cities certificates (93/115 ULBs submitted), and new PMAY ARH drive.",
+const COST_CARDS: CostCard[] = [
+  {
+    key: "pmay-cost",
+    label: "PMAY-U",
+    valueDisplay: "₹0.21 Cr",
+    unit: "per house completed",
+    footer: "975 houses completed of 9,620 grounded",
+    tier: "bad",
+  },
+  {
+    key: "msby-cost",
+    label: "MSBY",
+    valueDisplay: "₹17.94 Cr",
+    unit: "per project completed",
+    footer: "65 of 284 infra projects completed",
+    tier: "bad",
+  },
+  {
+    key: "sujala-cost",
+    label: "SUJALA",
+    valueDisplay: "₹7,153",
+    unit: "per tap connection",
+    footer: "11.26 lakh households with tap connections",
+    tier: "mid",
+  },
+  {
+    key: "sbm-cost",
+    label: "SBM",
+    valueDisplay: "₹31,981",
+    unit: "per IHHL toilet constructed",
+    footer: "26,950 IHHLs constructed",
+    tier: "good",
+  },
+  {
+    key: "urban-cost",
+    label: "URBAN MOBILITY",
+    valueDisplay: "₹1.14 Cr",
+    unit: "per electric bus deployed",
+    footer: "290 electric buses deployed",
+    tier: "bad",
+  },
+  {
+    key: "amrut-cost",
+    label: "AMRUT 2.0",
+    valueDisplay: "₹18.77 Cr",
+    unit: "per ULB covered",
+    footer: "45 ULBs covered under AMRUT 2.0",
+    tier: "bad",
+  },
+  {
+    key: "fstp-cost",
+    label: "FSTP",
+    valueDisplay: "₹0.84 Cr",
+    unit: "per FSTP operational",
+    footer: "119 FSTPs managed by MSG/FSG",
+    tier: "mid",
+  },
+  {
+    key: "swm-cost",
+    label: "SWM",
+    valueDisplay: "₹12,71,084",
+    unit: "per MT/day capacity",
+    footer: "2,037 of 2,955 wards with 100% D2D collection",
+    tier: "mid",
+  },
 ];
 
-function matchesFilter(row: SchemeRow, filter: SchemeFilter): boolean {
+const RISK_INSIGHTS: RiskInsight[] = [
+  {
+    id: "1",
+    tier: "risk",
+    text: "MSBY shows 97% financial progress but only 22% project completion — critical implementation bottleneck despite near-full budget utilisation.",
+  },
+  {
+    id: "2",
+    tier: "risk",
+    text: "PMAY-U has spent ₹200.68 Cr (25% of RE) but only 975 houses completed of 9,620 grounded — execution gap persists.",
+  },
+  {
+    id: "3",
+    tier: "good",
+    text: "SUJALA (Water Supply) near-perfect: 98.52% household coverage achieved at 99.7% expenditure — end-of-FY alignment.",
+  },
+  {
+    id: "4",
+    tier: "watch",
+    text: "SBM delivers 31% physical progress at 24% expenditure — reasonable alignment; scaling up still needed.",
+  },
+  {
+    id: "5",
+    tier: "watch",
+    text: "FSTP & SWM show excellent alignment: both at ~99% physical progress matching near-full expenditure.",
+  },
+  {
+    id: "6",
+    tier: "risk",
+    text: "Sewerage & Drainage now at 100% expenditure but near-zero physical progress — funds fully disbursed ahead of ground work.",
+  },
+  {
+    id: "7",
+    tier: "watch",
+    text: "End-of-FY spending surge: State Sector Schemes at 98% utilisation (up from 87% at 61st meeting).",
+  },
+  {
+    id: "8",
+    tier: "watch",
+    text: "Urban Mobility (CRUT) at 99% expenditure but 43% physical progress — spending accelerated ahead of deployment.",
+  },
+];
+
+function computeScore(physicalPct: number, financialPct: number): number | null {
+  if (financialPct <= 0) return null;
+  return physicalPct / financialPct;
+}
+
+function tierFromScore(score: number | null): EfficiencyTier {
+  if (score === null) return "na";
+  if (score >= 1.2) return "efficient";
+  if (score >= 0.8) return "balanced";
+  return "inefficient";
+}
+
+function tierBarClass(tier: EfficiencyTier): string {
+  switch (tier) {
+    case "efficient":
+      return "bg-emerald-600 dark:bg-emerald-500";
+    case "balanced":
+      return "bg-amber-500 dark:bg-amber-500";
+    case "inefficient":
+      return "bg-rose-600 dark:bg-rose-500";
+    default:
+      return "bg-rose-500/80";
+  }
+}
+
+function costTierValueClass(tier: CostCard["tier"]): string {
+  if (tier === "good") return "text-emerald-600 dark:text-emerald-400";
+  if (tier === "mid") return "text-amber-600 dark:text-amber-400";
+  return "text-rose-600 dark:text-rose-400";
+}
+
+function formatExpenditureCr(value: number | null): string {
+  if (value === null) return "—";
+  return `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}`;
+}
+
+function formatPct(value: number, decimals = 2): string {
+  return `${value.toFixed(decimals).replace(/\.?0+$/, "")}%`;
+}
+
+type SortKey = "scheme" | "expenditure" | "financial" | "physical" | "score";
+type SortDir = "asc" | "desc";
+
+function matchesFilter(row: ExecutionRow, filter: SchemeFilter): boolean {
   if (filter === "all") return true;
-  if (filter === "PMAY-U") return row.key === "pmay";
-  if (filter === "Sewerage & Drainage") return row.key === "sewerage";
-  return row.fullName === filter || row.shortName === filter;
+  return row.filterTags.includes(filter);
+}
+
+type ScatterPoint = {
+  key: string;
+  name: string;
+  physicalPct: number;
+  financialPct: number;
+  fill: string;
+};
+
+function scatterColor(score: number | null): string {
+  const t = tierFromScore(score);
+  if (t === "efficient") return "#059669";
+  if (t === "balanced") return "#f59e0b";
+  return "#e11d48";
 }
 
 type Props = { userRole?: UserRole };
 
 export default function ExecutionEfficiencyClient({ userRole }: Props) {
   const [schemeFilter, setSchemeFilter] = useState<SchemeFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isViewer = userRole === UserRole.VIEWER;
 
   const visibleRows = useMemo(
-    () => SCHEME_ROWS.filter((r) => matchesFilter(r, schemeFilter)),
+    () => EXECUTION_ROWS.filter((r) => matchesFilter(r, schemeFilter)),
     [schemeFilter],
   );
 
+  const tableRows = useMemo(() => {
+    const enriched = visibleRows.map((r) => {
+      const score = computeScore(r.physicalPct, r.financialPct);
+      return { ...r, score, tier: tierFromScore(score) };
+    });
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...enriched].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "scheme":
+          cmp = a.scheme.localeCompare(b.scheme);
+          break;
+        case "expenditure": {
+          const av = a.expenditureCr ?? -1;
+          const bv = b.expenditureCr ?? -1;
+          cmp = av - bv;
+          break;
+        }
+        case "financial":
+          cmp = a.financialPct - b.financialPct;
+          break;
+        case "physical":
+          cmp = a.physicalPct - b.physicalPct;
+          break;
+        case "score": {
+          const as = a.score ?? -Infinity;
+          const bs = b.score ?? -Infinity;
+          cmp = as - bs;
+          break;
+        }
+        default:
+          break;
+      }
+      return cmp * dir;
+    });
+  }, [visibleRows, sortKey, sortDir]);
+
+  const scatterData: ScatterPoint[] = useMemo(
+    () =>
+      visibleRows
+        .filter((r) => r.financialPct > 0)
+        .map((r) => {
+          const score = computeScore(r.physicalPct, r.financialPct);
+          return {
+            key: r.key,
+            name: r.scheme,
+            physicalPct: r.physicalPct,
+            financialPct: r.financialPct,
+            fill: scatterColor(score),
+          };
+        }),
+    [visibleRows],
+  );
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "scheme" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortKey !== column) {
+      return <ArrowUpDown className="size-3.5 opacity-40" aria-hidden />;
+    }
+    return sortDir === "asc" ? (
+      <ArrowUp className="size-3.5 text-[var(--sidebar-active-bg)]" aria-hidden />
+    ) : (
+      <ArrowDown className="size-3.5 text-[var(--sidebar-active-bg)]" aria-hidden />
+    );
+  };
+
   return (
-    <AppShell title="Execution efficiency">
+    <AppShell title="Execution Efficiency">
       <div className="relative space-y-8 px-6 py-6">
         {isViewer && (
           <div className="pointer-events-none absolute right-6 top-4 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
@@ -87,7 +460,8 @@ export default function ExecutionEfficiencyClient({ userRole }: Props) {
             Execution Efficiency
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">
-            Financial vs Physical Progress · 2025-26 · Combined metric methodology under discussion
+            Financial vs Physical Progress · 2025-26 ·{" "}
+            <span className="italic">Combined metric methodology under discussion</span>
           </p>
         </div>
 
@@ -102,7 +476,7 @@ export default function ExecutionEfficiencyClient({ userRole }: Props) {
                 className={[
                   "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                   active
-                    ? "border-[var(--sidebar-active-bg)] bg-[var(--sidebar-active-bg)]/15 text-[var(--text-primary)]"
+                    ? "border-[var(--sidebar-active-bg)] bg-[var(--sidebar-active-bg)] text-[var(--bg-card)] dark:text-white"
                     : "border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:border-[var(--text-muted)]/40 hover:text-[var(--text-primary)]",
                 ].join(" ")}
               >
@@ -112,139 +486,285 @@ export default function ExecutionEfficiencyClient({ userRole }: Props) {
           })}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Financial vs Physical Progress</h2>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">Relative spend and delivery (illustrative quadrants)</p>
-            <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--border)]">
-              <div className="flex min-h-[100px] flex-col justify-between bg-amber-50/80 p-3 dark:bg-amber-950/25">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-amber-900/80 dark:text-amber-200/90">
-                  Low financial %
-                </span>
-                <span className="text-xs font-medium leading-snug text-amber-950 dark:text-amber-100">
-                  ⚠ Low spend
-                  <br />
-                  Low progress
-                </span>
-              </div>
-              <div className="flex min-h-[100px] flex-col justify-between bg-emerald-50/80 p-3 dark:bg-emerald-950/25">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-900/80 dark:text-emerald-200/90">
-                  High financial %
-                </span>
-                <span className="text-xs font-medium leading-snug text-emerald-950 dark:text-emerald-100">
-                  ⭐ Low spend
-                  <br />
-                  High progress
-                </span>
-              </div>
-              <div className="flex min-h-[100px] flex-col justify-between bg-rose-50/80 p-3 dark:bg-rose-950/25">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-rose-900/80 dark:text-rose-200/90">
-                  Low financial %
-                </span>
-                <span className="text-xs font-medium leading-snug text-rose-950 dark:text-rose-100">
-                  ⚠ High spend
-                  <br />
-                  Low progress
-                </span>
-              </div>
-              <div className="flex min-h-[100px] flex-col justify-between bg-sky-50/80 p-3 dark:bg-sky-950/25">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-sky-900/80 dark:text-sky-200/90">
-                  High financial %
-                </span>
-                <span className="text-xs font-medium leading-snug text-sky-950 dark:text-sky-100">
-                  ⚡ High spend
-                  <br />
-                  High progress
-                </span>
-              </div>
+        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Financial vs Physical Progress</h2>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                X-axis: physical % · Y-axis: financial % · Reference lines at 50%
+              </p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-[var(--text-muted)]">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-emerald-500" aria-hidden />
-                Efficient (≥1.2)
+                <span className="size-2 rounded-full bg-emerald-600" aria-hidden />
+                Efficient (Score ≥ 1.2)
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-slate-400" aria-hidden />
-                Balanced (0.8–1.2)
+                <span className="size-2 rounded-full bg-amber-500" aria-hidden />
+                Balanced (Score 0.8 – 1.2)
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-rose-500" aria-hidden />
-                Inefficient (&lt;0.8)
+                <span className="size-2 rounded-full bg-rose-600" aria-hidden />
+                Inefficient (Score &lt; 0.8)
               </span>
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Physical vs financial</h2>
-            <div className="mt-4 flex min-h-[200px] flex-col items-stretch justify-center gap-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 px-4 py-6">
-              <p className="text-center text-xs font-semibold text-[var(--text-primary)]">Physical Progress (%)</p>
-              <div className="relative mx-auto aspect-square w-full max-w-[180px] rounded-md border border-[var(--border)] bg-[var(--bg-card)]">
-                <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[var(--border)]" />
-                <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[var(--border)]" />
+          <div className="relative min-h-[380px] w-full">
+            <div className="pointer-events-none absolute left-12 right-4 top-10 z-10 grid h-[calc(100%-4.5rem)] grid-cols-2 grid-rows-2 gap-0 text-[10px] font-medium leading-snug text-[var(--text-muted)]">
+              <div className="flex items-start justify-start pr-2 pt-0">
+                <span className="inline-flex max-w-[9rem] items-start gap-1">
+                  <TriangleAlert className="mt-0.5 size-3 shrink-0 text-amber-600" aria-hidden />
+                  <span>High Spend Low Progress</span>
+                </span>
               </div>
-              <p className="text-center text-xs font-semibold text-[var(--text-primary)]">Financial (%)</p>
+              <div className="flex items-start justify-end pl-2 pt-0 text-right">
+                <span className="inline-flex max-w-[9rem] flex-row-reverse items-start gap-1">
+                  <Star className="mt-0.5 size-3 shrink-0 text-emerald-600" aria-hidden />
+                  <span>High Spend High Progress</span>
+                </span>
+              </div>
+              <div className="flex items-end justify-start pr-2 pb-0">
+                <span className="inline-flex max-w-[9rem] items-start gap-1">
+                  <TriangleAlert className="mt-0.5 size-3 shrink-0 text-amber-600" aria-hidden />
+                  <span>Low Spend Low Progress</span>
+                </span>
+              </div>
+              <div className="flex items-end justify-end pl-2 pb-0 text-right">
+                <span className="inline-flex max-w-[9rem] flex-row-reverse items-start gap-1">
+                  <Star className="mt-0.5 size-3 shrink-0 text-emerald-600" aria-hidden />
+                  <span>Low Spend High Progress</span>
+                </span>
+              </div>
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">
-              Scheme Execution Efficiency — Score = Physical% ÷ Financial% · &gt;1.2 Efficient · 0.8–1.2 Balanced · &lt;0.8
-              Inefficient
-            </p>
-          </section>
-        </div>
+
+            <ResponsiveContainer width="100%" height={380}>
+              <ScatterChart margin={{ top: 16, right: 24, bottom: 36, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
+                <XAxis
+                  type="number"
+                  dataKey="physicalPct"
+                  name="Physical"
+                  unit="%"
+                  domain={[0, 105]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  label={{ value: "Physical Progress (%)", position: "bottom", offset: 18, fill: "var(--text-muted)", fontSize: 12 }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="financialPct"
+                  name="Financial"
+                  unit="%"
+                  domain={[0, 105]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  label={{
+                    value: "Financial (%)",
+                    angle: -90,
+                    position: "insideLeft",
+                    offset: 10,
+                    fill: "var(--text-muted)",
+                    fontSize: 12,
+                  }}
+                />
+                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" strokeOpacity={0.7} />
+                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" strokeOpacity={0.7} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload as ScatterPoint;
+                    return (
+                      <div
+                        className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs shadow-md"
+                        style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}
+                      >
+                        <p className="font-semibold">{p.name}</p>
+                        <p className="mt-1 tabular-nums text-[var(--text-muted)]">
+                          Physical: {p.physicalPct.toFixed(2)}%
+                        </p>
+                        <p className="tabular-nums text-[var(--text-muted)]">Financial: {p.financialPct.toFixed(2)}%</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Scatter data={scatterData} fill="#8884d8">
+                  {scatterData.map((entry) => (
+                    <Cell key={entry.key} fill={entry.fill} />
+                  ))}
+                  <LabelList dataKey="name" position="top" offset={6} fill="var(--text-primary)" fontSize={10} />
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
         <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-sm">
           <div className="border-b border-[var(--border)] px-5 py-4">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Scheme Execution Efficiency</h2>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              Score = Physical% ÷ Financial% · &gt;1.2 Efficient · 0.8–1.2 Balanced · &lt;0.8 Inefficient
+              Score = Physical% ÷ Financial% · &gt; 1.2 Efficient · 0.8 – 1.2 Balanced · &lt; 0.8 Inefficient
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--bg-primary)]/30 text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
-                  <th className="px-4 py-3 font-semibold">Scheme</th>
-                  <th className="px-4 py-3 font-semibold">Programme</th>
-                  <th className="px-4 py-3 font-semibold">Score</th>
-                  <th className="px-4 py-3 font-semibold">Physical (%)</th>
-                  <th className="px-4 py-3 font-semibold">Financial (%)</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("scheme")}
+                      className="inline-flex items-center gap-1 font-semibold hover:text-[var(--text-primary)]"
+                    >
+                      Scheme
+                      <SortIcon column="scheme" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("expenditure")}
+                      className="inline-flex items-center gap-1 font-semibold hover:text-[var(--text-primary)]"
+                    >
+                      Expend. (Cr)
+                      <SortIcon column="expenditure" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("financial")}
+                      className="inline-flex items-center gap-1 font-semibold hover:text-[var(--text-primary)]"
+                    >
+                      Financial%
+                      <SortIcon column="financial" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("physical")}
+                      className="inline-flex items-center gap-1 font-semibold hover:text-[var(--text-primary)]"
+                    >
+                      Physical%
+                      <SortIcon column="physical" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("score")}
+                      className="inline-flex items-center gap-1 font-semibold hover:text-[var(--text-primary)]"
+                    >
+                      Score
+                      <SortIcon column="score" />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row) => (
-                  <tr key={row.key} className="border-b border-[var(--border)]/80 last:border-0">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{row.shortName}</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)]">{row.fullName}</td>
-                    <td className="px-4 py-3 tabular-nums text-[var(--text-muted)]">{row.scoreLabel}</td>
-                    <td className="px-4 py-3 tabular-nums text-[var(--text-primary)]">{row.physicalPct}%</td>
-                    <td className="px-4 py-3 tabular-nums text-[var(--text-primary)]">{row.financialPct}%</td>
-                    <td className="px-4 py-3 text-[var(--text-muted)]">{row.efficiencyLabel}</td>
-                  </tr>
-                ))}
+                {tableRows.map((row) => {
+                  const physDisplayTier = row.tier === "na" ? "inefficient" : row.tier;
+                  return (
+                    <tr key={row.key} className="border-b border-[var(--border)]/80 last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-[var(--text-primary)]">{row.scheme}</div>
+                        <div className="text-xs text-[var(--text-muted)]">{row.programme}</div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-[var(--text-primary)]">{formatExpenditureCr(row.expenditureCr)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex min-w-[140px] flex-col gap-1">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-primary)]">
+                            <div
+                              className="h-full rounded-full bg-zinc-600 dark:bg-zinc-400"
+                              style={{ width: `${Math.min(100, row.financialPct)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs tabular-nums text-[var(--text-muted)]">
+                            {row.financialPct <= 0 ? "0%" : formatPct(row.financialPct)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex min-w-[140px] flex-col gap-1">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-primary)]">
+                            <div
+                              className={["h-full rounded-full", tierBarClass(physDisplayTier)].join(" ")}
+                              style={{ width: `${Math.min(100, row.physicalPct)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs tabular-nums text-[var(--text-muted)]">{formatPct(row.physicalPct)}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.score === null ? (
+                          <span className="inline-flex rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                            N/A
+                          </span>
+                        ) : (
+                          <span
+                            className={[
+                              "inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold tabular-nums",
+                              row.tier === "efficient" && "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+                              row.tier === "balanced" && "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+                              row.tier === "inefficient" && "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                          >
+                            {row.score.toFixed(2)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </section>
 
         <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Cost Efficiency Indicators</h2>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Cost per output unit = Total Expenditure ÷ Physical Output
-          </p>
+          <h2 className="text-base font-bold text-[var(--text-primary)]">Cost Efficiency Indicators</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Cost per output unit = Total Expenditure ÷ Physical Output</p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            {COST_CARDS.map((c) => (
+              <div
+                key={c.key}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]/20 px-4 py-4 shadow-sm"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{c.label}</p>
+                <p className={["mt-2 text-2xl font-bold tabular-nums", costTierValueClass(c.tier)].join(" ")}>{c.valueDisplay}</p>
+                <p className="mt-1 text-sm text-[var(--text-primary)]">{c.unit}</p>
+                <p className="mt-3 text-[11px] leading-relaxed text-[var(--text-muted)]">{c.footer}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section className="rounded-xl border border-amber-200/60 bg-amber-50/50 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
               <Lightbulb className="size-5" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Execution Risk Insights</h2>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Execution Risk Insights</h2>
               <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-[var(--text-muted)]">
-                {RISK_INSIGHTS.map((line) => (
-                  <li key={line} className="flex gap-2">
-                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden />
-                    <span>{line}</span>
+                {RISK_INSIGHTS.map((item) => (
+                  <li key={item.id} className="flex gap-3">
+                    <span
+                      className={[
+                        "mt-2 size-2 shrink-0 rounded-full",
+                        item.tier === "risk" && "bg-rose-500",
+                        item.tier === "good" && "bg-emerald-500",
+                        item.tier === "watch" && "bg-amber-400",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      aria-hidden
+                    />
+                    <span>{item.text}</span>
                   </li>
                 ))}
               </ul>

@@ -13,7 +13,17 @@ import StatusBadge from "@/src/components/ui/StatusBadge";
 import PendingBadge from "@/src/components/ui/PendingBadge";
 import ViewKpiModal from "@/components/kpis/ViewKpiModal";
 import { Search } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+
+/** Bar chart: budget (accent) vs KPI (teal) — distinct from near-black text. */
+const CHART_KPI_PROGRESS_FILL = "#0d9488";
+
+const MEASUREMENT_PACE_BAR: Record<string, string> = {
+  on_track: "var(--alert-success)",
+  delayed: "var(--alert-warning)",
+  overdue: "var(--alert-critical)",
+  none: "var(--text-muted)",
+};
 
 interface TabConfig {
   id: string;
@@ -180,8 +190,8 @@ export default function KPIsPage() {
   const compareBarData = useMemo(() => {
     if (!schemeAnalytics) return [];
     return [
-      { name: "Budget utilisation", pct: schemeAnalytics.budgetU },
-      { name: "KPI progress (est.)", pct: schemeAnalytics.kpiAvg ?? 0 },
+      { name: "Budget utilisation", pct: schemeAnalytics.budgetU, fill: "var(--accent)" },
+      { name: "KPI progress (est.)", pct: schemeAnalytics.kpiAvg ?? 0, fill: CHART_KPI_PROGRESS_FILL },
     ];
   }, [schemeAnalytics]);
 
@@ -205,24 +215,26 @@ export default function KPIsPage() {
             <button
               type="button"
               onClick={() => setFocusScheme(null)}
-              className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
+              className={`mb-1 w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                 focusScheme === null
-                  ? "border border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
-                  : "text-[var(--text-primary)] hover:bg-[var(--bg-content-surface)]"
+                  ? "border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
+                  : "border-transparent bg-[var(--bg-content-surface)] text-[var(--text-primary)] hover:brightness-[0.98]"
               }`}
             >
               <span className="font-medium">Full registry</span>
               <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">All KPIs · table & reviews</span>
             </button>
-            {filteredSchemes.map((name) => (
+            {filteredSchemes.map((name, schemeIndex) => (
               <button
                 key={name}
                 type="button"
                 onClick={() => setFocusScheme(name)}
-                className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                className={`mb-1 w-full rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                   focusScheme === name
-                    ? "border border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
-                    : "text-[var(--text-primary)] hover:bg-[var(--bg-content-surface)]"
+                    ? "border-[var(--accent)] bg-[var(--bg-content-surface)] shadow-sm"
+                    : `border-transparent text-[var(--text-primary)] hover:brightness-[0.98] ${
+                        (schemeIndex + 1) % 2 === 0 ? "bg-[var(--bg-content-surface)]" : "bg-[var(--bg-alternate-card)]"
+                      }`
                 }`}
               >
                 {name}
@@ -304,7 +316,7 @@ export default function KPIsPage() {
                   <BarChart data={compareBarData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "var(--text-muted)" }} unit="%" />
                     <Tooltip
                       formatter={(v) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
                       contentStyle={{
@@ -313,15 +325,32 @@ export default function KPIsPage() {
                         fontSize: 12,
                       }}
                     />
-                    <Legend />
-                    <Bar dataKey="pct" name="%" fill="var(--text-primary)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="pct" name="Value" radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                      {compareBarData.map((entry, i) => (
+                        <Cell key={`compare-bar-${i}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-[var(--text-secondary)]">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--accent)]" aria-hidden />
+                  Budget utilisation
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: CHART_KPI_PROGRESS_FILL }}
+                    aria-hidden
+                  />
+                  KPI progress (est.)
+                </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)]">
                 <div>
                   <span className="text-[var(--text-muted)]">IFMS utilisation</span>
-                  <p className="font-semibold tabular-nums text-[var(--text-primary)]">
+                  <p className="font-semibold tabular-nums text-[var(--accent)]">
                     {schemeAnalytics.budgetU.toFixed(1)}%
                     {!financialForFocus && (
                       <span className="ml-1 font-normal text-[var(--text-muted)]">(no finance row)</span>
@@ -330,7 +359,7 @@ export default function KPIsPage() {
                 </div>
                 <div>
                   <span className="text-[var(--text-muted)]">Avg. KPI score (est.)</span>
-                  <p className="font-semibold tabular-nums text-[var(--text-primary)]">
+                  <p className="font-semibold tabular-nums" style={{ color: CHART_KPI_PROGRESS_FILL }}>
                     {schemeAnalytics.kpiAvg != null ? `${schemeAnalytics.kpiAvg.toFixed(1)}%` : "—"}
                   </p>
                 </div>
@@ -355,9 +384,10 @@ export default function KPIsPage() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[var(--border)]">
                       <div
-                        className="h-full rounded-full bg-[var(--text-primary)]"
+                        className="h-full rounded-full transition-[width]"
                         style={{
                           width: `${submissionsForFocus.length ? (count / submissionsForFocus.length) * 100 : 0}%`,
+                          backgroundColor: MEASUREMENT_PACE_BAR[key] ?? "var(--text-muted)",
                         }}
                       />
                     </div>
@@ -413,7 +443,7 @@ export default function KPIsPage() {
                 <div
                   key={item.id}
                   className={`cursor-pointer rounded-2xl border border-[var(--border)] p-4 transition ${
-                    index % 2 === 0 ? "bg-[var(--bg-card)]" : "bg-[var(--bg-alternate-card)]"
+                    index % 2 === 0 ? "bg-[var(--bg-content-surface)]" : "bg-[var(--bg-alternate-card)]"
                   }`}
                   onClick={() => setViewKpi(item)}
                 >
@@ -518,10 +548,12 @@ export default function KPIsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((item) => (
+                  {filtered.map((item, index) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b border-[var(--border)] text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)]"
+                      className={`cursor-pointer border-b border-[var(--border)] text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)] ${
+                        index % 2 === 0 ? "bg-[var(--bg-content-surface)]" : "bg-[var(--bg-alternate-card)]"
+                      }`}
                       onClick={() => setViewKpi(item)}
                     >
                       <td className="py-3 pr-4 font-medium">{item.scheme}</td>

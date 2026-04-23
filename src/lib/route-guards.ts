@@ -3,7 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, createElement } from "react";
 import type { ComponentProps, ComponentType } from "react";
-import { getCurrentUser, hasPermission, MockUser, Permission, refreshSessionUserFromApi, UserRole } from "@/lib/auth";
+import {
+  getCurrentUser,
+  hasPermission,
+  MockUser,
+  Permission,
+  refreshSessionUserFromApi,
+  UserRole,
+  canAccessMyTasksHub,
+} from "@/lib/auth";
+import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import { hasPendingAssignedActionItems } from "@/src/lib/actionItemAssignment";
 
 export function useRequireAuth(redirectTo = "/login") {
   const router = useRouter();
@@ -83,6 +93,45 @@ export function useRequireAnyPermission(permissions: Permission[], redirectTo = 
       cancelled = true;
     };
   }, [permKey, redirectTo, router]);
+
+  return useMemo(() => user, [user]);
+}
+
+/** /my-tasks — allowed when hub permissions apply, or when the user has pending decision items assigned to them. */
+export function useRequireMyTasksHub(redirectTo = "/dashboard") {
+  const router = useRouter();
+  const [user, setUser] = useState<MockUser | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await refreshSessionUserFromApi();
+      if (cancelled) return;
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        router.replace("/login");
+        return;
+      }
+      if (canAccessMyTasksHub(currentUser)) {
+        setUser(currentUser);
+        return;
+      }
+      try {
+        const items = await fetchActionItems();
+        if (cancelled) return;
+        if (hasPendingAssignedActionItems(items, currentUser)) {
+          setUser(currentUser);
+          return;
+        }
+      } catch {
+        /* fall through to redirect */
+      }
+      if (!cancelled) router.replace(redirectTo);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [redirectTo, router]);
 
   return useMemo(() => user, [user]);
 }

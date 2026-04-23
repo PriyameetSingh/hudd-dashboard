@@ -1,6 +1,8 @@
+import type { SponsorshipType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/financial-budget-entries";
 import { getFinancialBudgetEntriesOverview } from "@/lib/financial-budget-entries";
+import { sponsorshipToSchemeBudgetCategory } from "@/lib/scheme-fy-bucket-metrics";
 import type { DbUserWithRbac } from "@/lib/server-rbac";
 import type { FinancialEntry } from "@/types";
 
@@ -52,9 +54,18 @@ export type CommandCentreLastMeeting = {
   }>;
 };
 
+/** Counts for command-centre “Schemes monitored” summary (by scheme sponsorship). */
+export type CommandCentreSchemesMonitored = {
+  total: number;
+  stateSector: number;
+  centrallySponsored: number;
+  centralSector: number;
+};
+
 export type CommandCentreDashboard = {
   financialYearLabel: string | null;
   lastSnapshotDate: string | null;
+  schemesMonitored: CommandCentreSchemesMonitored;
   totals: {
     totalBudgetCr: number;
     totalSoCr: number;
@@ -174,6 +185,24 @@ export async function getCommandCentreDashboard(
   const utilisationPct = totalBudgetCr > 0 ? (totalIfmsCr / totalBudgetCr) * 100 : 0;
   const lapseRiskCr = Math.max(0, totalBudgetCr - totalIfmsCr);
 
+  let stateSector = 0;
+  let centrallySponsored = 0;
+  let centralSector = 0;
+  for (const e of entries) {
+    const st = (e.metadata as { sponsorshipType?: SponsorshipType } | undefined)?.sponsorshipType;
+    if (!st) continue;
+    const cat = sponsorshipToSchemeBudgetCategory(st);
+    if (cat === "STATE_SCHEME") stateSector += 1;
+    else if (cat === "CENTRALLY_SPONSORED_SCHEME") centrallySponsored += 1;
+    else centralSector += 1;
+  }
+  const schemesMonitored: CommandCentreSchemesMonitored = {
+    total: entries.length,
+    stateSector,
+    centrallySponsored,
+    centralSector,
+  };
+
   const schemes: CommandCentreSchemeSummary[] = entries.map((e) => {
     const budgetCr = e.effectiveBudgetCr ?? e.annualBudget + (e.totalSupplementCr ?? 0);
     const pct = schemePct(e);
@@ -252,6 +281,7 @@ export async function getCommandCentreDashboard(
   return {
     financialYearLabel,
     lastSnapshotDate,
+    schemesMonitored,
     totals: {
       totalBudgetCr,
       totalSoCr,

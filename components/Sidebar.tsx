@@ -2,7 +2,12 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { UserRole, canAccessMyTasksHub, hasPermission, Permission, type MockUser } from "@/lib/auth";
+import { UserRole, hasPermission, Permission, type MockUser } from "@/lib/auth";
+import {
+  canSeeMyTasksNav,
+  hasPendingAssignedActionItems,
+  isAssignedActionOfficer,
+} from "@/src/lib/actionItemAssignment";
 import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import { fetchActionItems } from "@/src/lib/services/actionItemService";
 import { fetchKPISubmissions } from "@/src/lib/services/kpiService";
@@ -21,13 +26,6 @@ import {
   Gauge,
   CheckSquare,
 } from "lucide-react";
-
-const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
-
-function isAssignedToUser(item: ActionItem, user: MockUser) {
-  const target = normalize(user.name);
-  return target.length > 0 && normalize(item.assignedTo).includes(target);
-}
 
 function isPendingAction(item: ActionItem) {
   return item.status !== "COMPLETED";
@@ -49,7 +47,7 @@ function isDueWithinWeek(item: ActionItem) {
 }
 
 function pendingAssignedBadgeState(items: ActionItem[], user: MockUser): { count: number; tone: "red" | "yellow" | "green" | null } {
-  const mine = items.filter((item) => isAssignedToUser(item, user) && isPendingAction(item));
+  const mine = items.filter((item) => isAssignedActionOfficer(item, user) && isPendingAction(item));
   const count = mine.length;
   if (count === 0) return { count: 0, tone: null };
   const anyOverdue = mine.some(isOverdue);
@@ -101,7 +99,7 @@ type NavItem = {
   badge?: string;
   emphasis?: boolean;
   children?: NavItem[];
-  /** When true, item is shown only if `canAccessMyTasksHub(user)` (financial / KPI / action-item work). */
+  /** When true, item is shown only if hub permissions apply or the user has pending assigned decision items. */
   myTasksHubGate?: boolean;
 };
 
@@ -402,16 +400,20 @@ export default function Sidebar() {
   const kpiEntryBadge = useMemo(() => pendingKpiEntryBadgeState(kpiSubmissions, assigneeDbUserId), [kpiSubmissions, assigneeDbUserId]);
 
   const myTasksHubBadge = useMemo((): { count: number; tone: "red" | "yellow" | "green" | null } => {
-    if (!user || !canAccessMyTasksHub(user)) return { count: 0, tone: null };
+    if (!user || !canSeeMyTasksNav(user, actionItems)) return { count: 0, tone: null };
     const slices: { count: number; tone: "red" | "yellow" | "green" | null }[] = [];
-    if (hasPermission(user, Permission.UPDATE_ACTION_ITEMS) || hasPermission(user, Permission.CREATE_ACTION_ITEMS)) {
+    const includeActionSlice =
+      hasPermission(user, Permission.UPDATE_ACTION_ITEMS) ||
+      hasPermission(user, Permission.CREATE_ACTION_ITEMS) ||
+      hasPendingAssignedActionItems(actionItems, user);
+    if (includeActionSlice) {
       slices.push(actionItemsBadge ?? { count: 0, tone: null });
     }
     if (hasPermission(user, Permission.ENTER_KPI_DATA)) {
       slices.push(kpiEntryBadge);
     }
     return mergePendingBadges(slices);
-  }, [user, actionItemsBadge, kpiEntryBadge]);
+  }, [user, actionItems, actionItemsBadge, kpiEntryBadge]);
 
   const roleBadge = useMemo(() => {
     if (!user) return null;
@@ -425,7 +427,7 @@ export default function Sidebar() {
   const visibleItems = user
     ? items.filter(
         (item) =>
-          item.roles.includes(user.role) && (!item.myTasksHubGate || canAccessMyTasksHub(user)),
+          item.roles.includes(user.role) && (!item.myTasksHubGate || canSeeMyTasksNav(user, actionItems)),
       )
     : [];
 

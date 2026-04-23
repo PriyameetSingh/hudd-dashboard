@@ -1,17 +1,41 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import { Permission, hasPermission } from "@/lib/auth";
+import { useRequireMyTasksHub } from "@/src/lib/route-guards";
 import {
-  MY_TASKS_HUB_ACCESS_PERMISSIONS,
-  Permission,
-  hasPermission,
-} from "@/lib/auth";
-import { useRequireAnyPermission } from "@/src/lib/route-guards";
+  filterAssignedPendingActionItems,
+  hasAnyAssignedActionItems,
+} from "@/src/lib/actionItemAssignment";
+import { fetchActionItems } from "@/src/lib/services/actionItemService";
+import type { ActionItem } from "@/types";
 import { ArrowRight, ClipboardList, IndianRupee, ListChecks } from "lucide-react";
 
 export default function MyTasksHubPage() {
-  const user = useRequireAnyPermission(MY_TASKS_HUB_ACCESS_PERMISSIONS);
+  const user = useRequireMyTasksHub();
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    void fetchActionItems()
+      .then((data) => {
+        if (active) setActionItems(data);
+      })
+      .catch(() => {
+        if (active) setActionItems([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const assignedPending = useMemo(
+    () => (user ? filterAssignedPendingActionItems(actionItems, user) : []),
+    [actionItems, user],
+  );
 
   if (!user) {
     return null;
@@ -19,9 +43,10 @@ export default function MyTasksHubPage() {
 
   const showKpi = hasPermission(user, Permission.ENTER_KPI_DATA);
   const showFinance = hasPermission(user, Permission.ENTER_FINANCIAL_DATA);
-  const showActions =
+  const showActionsByPermission =
     hasPermission(user, Permission.UPDATE_ACTION_ITEMS) ||
     hasPermission(user, Permission.CREATE_ACTION_ITEMS);
+  const showActions = showActionsByPermission || hasAnyAssignedActionItems(actionItems, user);
 
   return (
     <AppShell title="My tasks">
@@ -67,13 +92,32 @@ export default function MyTasksHubPage() {
                 <div className="min-w-0 flex-1">
                   <h2 className="text-sm font-semibold text-[var(--sidebar-text-primary)]">Decision tracker</h2>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-                    View and update action items assigned to you, upload proof, and track status in one place.
+                    {showActionsByPermission
+                      ? "View and update action items assigned to you, upload proof, and track status in one place."
+                      : "You have decision items assigned to you. Open one below or go to the full tracker."}
                   </p>
+                  {/* {assignedPending.length > 0 && (
+                    <ul className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
+                      {assignedPending.map((item) => (
+                        <li key={item.id}>
+                          <Link
+                            href={`/action-items/${item.id}`}
+                            className="flex flex-col gap-0.5 rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-left text-xs transition hover:bg-[var(--sidebar-hover-bg)]/50"
+                          >
+                            <span className="font-medium text-[var(--sidebar-text-primary)]">{item.title}</span>
+                            <span className="text-[var(--text-muted)]">
+                              Due {item.dueDate} · {item.status.replace(/_/g, " ")}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )} */}
                   <Link
                     href="/action-items"
                     className="mt-3 inline-flex items-center gap-2 rounded-md bg-[var(--sidebar-active-bg)] px-3 py-2 text-xs font-medium text-[var(--sidebar-text-primary)] transition hover:opacity-90"
                   >
-                    Open action items
+                    Open full action list
                     <ArrowRight size={14} aria-hidden />
                   </Link>
                 </div>
@@ -102,7 +146,7 @@ export default function MyTasksHubPage() {
                     </Link>
                     <Link
                       href="/financial/entry/summary"
-                      className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs font-medium text-[var(--sidebar-text-primary)] transition hover:bg-[var(--sidebar-hover-bg)]/60"
+                      className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--sidebar-hover-bg)]/60"
                     >
                       Summary entry
                       <ArrowRight size={14} aria-hidden />

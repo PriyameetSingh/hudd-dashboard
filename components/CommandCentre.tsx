@@ -5,10 +5,8 @@ import { useHydratedCurrentUser } from "@/src/lib/use-hydrated-current-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useEffect, useState, useCallback, Suspense } from "react";
 import {
-  AlertTriangle,
   TrendingUp,
   TrendingDown,
-  Clock,
   ArrowUpRight,
   ListChecks,
   Presentation,
@@ -19,7 +17,11 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchPendingApprovalSummaries } from "@/src/lib/services/approvalService";
 import { fetchCommandCentreDashboard } from "@/src/lib/services/dashboardService";
 import { getMeetingMaterialSignedUrl } from "@/src/lib/services/meetingService";
-import type { CommandCentreDashboard, CommandCentreLastMeeting } from "@/lib/command-centre-dashboard";
+import type {
+  CommandCentreDashboard,
+  CommandCentreLastMeeting,
+  CommandCentreSchemesMonitored,
+} from "@/lib/command-centre-dashboard";
 import ApprovalCard from "@/src/components/ui/ApprovalCard";
 import { PendingApprovalSummary } from "@/types";
 import AiAlertsCard from "@/components/command-centre/AiAlertsCard";
@@ -51,6 +53,28 @@ function pctTrendFromValue(pct: number): number[] {
 function formatMeetingDate(isoDate: string) {
   const d = new Date(`${isoDate}T12:00:00`);
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
+}
+
+/** IFMS “as on” line: `As on 26.12.2025` from `YYYY-MM-DD`. */
+function formatAsOnIndianDate(isoDate: string | null | undefined) {
+  if (!isoDate) return "—";
+  const [y, m, d] = isoDate.slice(0, 10).split("-");
+  if (!y || !m || !d) return "—";
+  return `As on ${d}.${m}.${y}`;
+}
+
+function formatUtilisationPct(pct: number) {
+  const rounded = Math.round(pct * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
+function schemesMonitoredFootnote(m: CommandCentreSchemesMonitored | null | undefined) {
+  if (!m) return "—";
+  const parts = [`State Sector: ${m.stateSector}`, `Centrally Sponsored: ${m.centrallySponsored}`];
+  if (m.centralSector > 0) parts.push(`Central Sector: ${m.centralSector}`);
+  const classified = m.stateSector + m.centrallySponsored + m.centralSector;
+  if (m.total > classified) parts.push(`Other: ${m.total - classified}`);
+  return parts.join(" - ");
 }
 
 function groupPresentationsByVertical(m: CommandCentreLastMeeting["presentationMaterials"]) {
@@ -263,15 +287,6 @@ function CommandCentreContent({ setActive }: Props) {
   ];
 
   const totals = dashboard?.totals;
-  const utilPct = totals ? totals.utilisationPct.toFixed(1) : "—";
-  const lapsePct =
-    totals && totals.totalBudgetCr > 0 ? ((totals.lapseRiskCr / totals.totalBudgetCr) * 100).toFixed(1) : "—";
-
-  const ifmsChartData =
-    dashboard?.ifmsTrend.map((p) => ({
-      d: p.asOfDate.slice(5),
-      ifms: Math.round(p.ifmsCr * 10) / 10,
-    })) ?? [];
 
   const lastMeeting = dashboard?.lastMeeting ?? null;
   const presentationsByVertical = useMemo(
@@ -295,7 +310,14 @@ function CommandCentreContent({ setActive }: Props) {
   return (
     <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "stretch" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2fr)", gap: 12, flex: 1 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 12,
+            flex: 1,
+          }}
+        >
           {dashLoading && (
             <>
               {[1, 2, 3, 4].map((i) => (
@@ -316,68 +338,63 @@ function CommandCentreContent({ setActive }: Props) {
           {!dashLoading &&
             [
               {
-                label: "TOTAL BUDGET",
+                key: "budget",
+                label: dashboard?.financialYearLabel
+                  ? `TOTAL BUDGET (FY ${dashboard.financialYearLabel})`
+                  : "TOTAL BUDGET",
                 value: totals ? formatCr(totals.totalBudgetCr) : "—",
-                sub: dashboard?.financialYearLabel ? `FY ${dashboard.financialYearLabel}` : "Latest FY",
-                icon: <TrendingUp size={16} />,
-                accent: false,
+                sub: "Including all plan types & transfers",
+                valueColor: "var(--text-primary)",
               },
               {
-                label: "IFMS ACTUAL",
+                key: "ifms",
+                label: "TOTAL EXPENDITURE (IFMS)",
                 value: totals ? formatCr(totals.totalIfmsCr) : "—",
-                sub: totals ? `${utilPct}% utilised` : "—",
-                icon: <TrendingUp size={16} />,
-                accent: false,
+                sub: formatAsOnIndianDate(dashboard?.lastSnapshotDate),
+                valueColor: "var(--text-primary)",
               },
               {
-                label: "BALANCE (UNUTILISED)",
-                value: totals ? formatCr(totals.lapseRiskCr) : "—",
-                sub: totals ? `${lapsePct}% of budget` : "—",
-                icon: <AlertTriangle size={16} />,
-                accent: Boolean(totals && totals.lapseRiskCr > totals.totalBudgetCr * 0.4),
+                key: "util",
+                label: "BUDGET UTILISATION %",
+                value: totals ? formatUtilisationPct(totals.utilisationPct) : "—",
+                sub: "Of total budget utilised to date",
+                valueColor: FP.red,
               },
               {
-                label: "OVERDUE ACTIONS",
-                value: dashboard ? String(dashboard.overdueActionsCount) : "—",
-                sub: `${dashboard?.criticalSchemeCount ?? 0} critical schemes`,
-                icon: <Clock size={16} />,
-                accent: Boolean(dashboard && dashboard.overdueActionsCount > 0),
+                key: "schemes",
+                label: "SCHEMES MONITORED",
+                value: dashboard ? String(dashboard.schemesMonitored.total) : "—",
+                sub: schemesMonitoredFootnote(dashboard?.schemesMonitored),
+                valueColor: "var(--text-primary)",
               },
-            ].map(({ label, value, sub, icon, accent }) => (
+            ].map(({ key, label, value, sub, valueColor }) => (
               <div
-                key={label}
+                key={key}
                 style={{
                   background: "var(--bg-card)",
-                  border: `1px solid ${accent ? "var(--alert-critical)" : "var(--border)"}`,
+                  border: "1px solid var(--border)",
                   borderRadius: 8,
                   padding: "16px",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: 8,
-                  }}
-                >
+                <div style={{ marginBottom: 8 }}>
                   <span
                     style={{
                       fontSize: 10,
                       letterSpacing: 1,
                       textTransform: "uppercase",
                       color: "var(--text-muted)",
+                      lineHeight: 1.35,
                     }}
                   >
                     {label}
                   </span>
-                  <span style={{ color: accent ? "var(--alert-critical)" : "var(--text-muted)" }}>{icon}</span>
                 </div>
                 <div
                   style={{
                     fontSize: 24,
                     fontWeight: 700,
-                    color: accent ? "var(--alert-critical)" : "var(--text-primary)",
+                    color: valueColor,
                     letterSpacing: -0.5,
                     fontVariantNumeric: "tabular-nums",
                   }}
@@ -802,7 +819,7 @@ function CommandCentreContent({ setActive }: Props) {
 function CommandCentreLoadingFallback() {
   return (
     <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}

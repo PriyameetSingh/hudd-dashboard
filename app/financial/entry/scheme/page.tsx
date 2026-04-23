@@ -131,7 +131,7 @@ function getSubschemeBudgetProgress(sub: {
 }
 
 export default function SchemeEntryPage() {
-  useRequireRole([UserRole.FA], "/");
+  useRequireRole([UserRole.FA, UserRole.NODAL_OFFICER], "/");
 
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<FinancialEntry[]>([]);
