@@ -1,0 +1,14 @@
+[Unit]
+Description=Auto-deploy application when changes are pushed
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/dev/hudd-dashboard
+ExecStart=/bin/bash -c 'while true; do /home/ec2-user/dev/hudd-dashboard/auto-deploy.sh; sleep 300; done'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
