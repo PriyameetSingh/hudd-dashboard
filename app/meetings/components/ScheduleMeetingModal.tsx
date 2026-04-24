@@ -77,7 +77,7 @@ export default function ScheduleMeetingModal({
       }
       if (failed.length) {
         window.alert(
-          `Meeting created, but ${failed.length} file(s) could not be uploaded:\n${failed.join("\n")}\n\nCheck Supabase configuration if this persists.`,
+          `Meeting created, but ${failed.length} file(s) could not be uploaded:\n${failed.join("\n")}\n\nPlease check the file size and format.`,
         );
       }
       onCreated();

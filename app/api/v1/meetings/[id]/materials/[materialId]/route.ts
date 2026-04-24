@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
-import { createSupabaseAdmin, isSupabaseConfigured, MEETING_MATERIALS_BUCKET } from "@/lib/supabase/server";
+import { deleteFile } from "@/lib/local-file-storage";
 
 export const runtime = "nodejs";
 
@@ -22,10 +22,8 @@ export async function DELETE(
       return NextResponse.json({ detail: "Material not found" }, { status: 404 });
     }
 
-    if (isSupabaseConfigured()) {
-      const supabase = createSupabaseAdmin();
-      await supabase.storage.from(MEETING_MATERIALS_BUCKET).remove([row.storagePath]);
-    }
+    // Delete the file from local storage
+    await deleteFile(row.storagePath);
 
     await prisma.meetingMaterial.delete({ where: { id: materialId } });
 

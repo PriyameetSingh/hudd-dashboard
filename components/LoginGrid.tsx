@@ -41,7 +41,7 @@ export default function LoginGrid() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] uppercase tracking-[0.4em] text-slate-400">Designation</p>
-              <h3 className="mt-2 text-lg font-semibold text-white">{user.name}</h3>
+              {/* <h3 className="mt-2 text-lg font-semibold text-white">{user.name}</h3> */}
               <p className="text-sm text-slate-300">{ROLE_TITLES[user.role]}</p>
               <p className="text-xs text-slate-400">{user.department}</p>
             </div>

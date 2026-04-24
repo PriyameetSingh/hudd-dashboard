@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuditRequestContext, logAudit } from "@/lib/audit";
 import { requireAnyPermission, requireAnyPermissionAndDbUser, toAuthErrorResponse } from "@/lib/server-rbac";
 import { assertAllowedMeetingMaterial, sanitizeMeetingFileName } from "@/lib/meeting-materials";
-import { createSupabaseAdmin, isSupabaseConfigured, MEETING_MATERIALS_BUCKET } from "@/lib/supabase/server";
+import { saveFile } from "@/lib/local-file-storage";
 
 export const runtime = "nodejs";
 
@@ -41,13 +41,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   try {
     const actor = await requireAnyPermissionAndDbUser("CREATE_ACTION_ITEMS", "MANAGE_SCHEMES");
 
-    if (!isSupabaseConfigured()) {
-      return NextResponse.json(
-        { detail: "File storage is not configured (Supabase URL / service role key)." },
-        { status: 503 },
-      );
-    }
-
     const { id: meetingId } = await ctx.params;
     const meeting = await prisma.dashboardMeeting.findUnique({
       where: { id: meetingId },
@@ -73,17 +66,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const safeName = sanitizeMeetingFileName(file.name);
     const objectKey = `${meetingId}/${randomUUID()}-${safeName}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const supabase = createSupabaseAdmin();
 
-    const { error: uploadError } = await supabase.storage
-      .from(MEETING_MATERIALS_BUCKET)
-      .upload(objectKey, buffer, {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      return NextResponse.json({ detail: uploadError.message || "Upload failed" }, { status: 502 });
+    try {
+      await saveFile(buffer, objectKey);
+    } catch (uploadError) {
+      const msg = uploadError instanceof Error ? uploadError.message : "Upload failed";
+      return NextResponse.json({ detail: msg }, { status: 502 });
     }
 
     const auditContext = getAuditRequestContext(request);
